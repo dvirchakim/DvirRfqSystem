@@ -284,7 +284,19 @@ export default function LiveRFQDashboard() {
     "--text3": "#7A8497",
   };
   const timerRef = useRef(null);
-  const processedIdsRef = useRef(new Set());
+  const isPollActiveRef = useRef(false);
+  // Persisted across page reloads — prevents re-processing emails after refresh
+  const processedIdsRef = useRef(new Set(
+    (() => { try { return JSON.parse(localStorage.getItem('rfq-processed-ids') || '[]'); } catch { return []; } })()
+  ));
+  const markProcessed = useCallback((id) => {
+    processedIdsRef.current.add(id);
+    try {
+      // Cap at 1000 most-recent IDs to avoid unbounded localStorage growth
+      const arr = [...processedIdsRef.current].slice(-1000);
+      localStorage.setItem('rfq-processed-ids', JSON.stringify(arr));
+    } catch {}
+  }, []);
 
   const addLog = useCallback((message, type = "info", detail = null) => {
     setLogs(prev => [{
@@ -299,7 +311,7 @@ export default function LiveRFQDashboard() {
   // ─── Process a single email text with Claude ───────────────────────
   const processEmail = useCallback(async (emailText, emailId) => {
     if (processedIdsRef.current.has(emailId)) return null;
-    processedIdsRef.current.add(emailId);
+    markProcessed(emailId);
 
     // Extract sender address and subject for follow-up emails
     const fromMatch = emailText.match(
@@ -416,7 +428,7 @@ export default function LiveRFQDashboard() {
       setIsProcessing(false);
       return null;
     }
-  }, [addLog, llmConfig, mailToken, mailProvider, msClientId, msTenantId]);
+  }, [addLog, llmConfig, markProcessed, mailToken, mailProvider, msClientId, msTenantId]);
 
   // ─── Real mailbox handlers (Gmail / Outlook) ──────────────────────
   const connectMailbox = useCallback(async () => {
@@ -529,6 +541,12 @@ export default function LiveRFQDashboard() {
       addLog("⚠️ התחבר לתיבת דואר (Inbox) לפני הפעלת המערכת", "warning");
       return;
     }
+    // Prevent concurrent poll runs — skip if previous poll still in progress
+    if (isPollActiveRef.current) {
+      addLog("⏭ סבב קודם עדיין פעיל — מדלג", "info");
+      return;
+    }
+    isPollActiveRef.current = true;
     addLog(`📬 בודק ${mailProvider}...`, "info");
     setStats(p => ({ ...p, lastCheck: new Date().toLocaleTimeString("he-IL") }));
     try {
@@ -538,13 +556,18 @@ export default function LiveRFQDashboard() {
       const fresh = list.filter(m => !processedIdsRef.current.has(`${mailProvider}-${m.id}`));
       if (fresh.length === 0) { addLog("📭 אין מיילים חדשים", "info"); return; }
       addLog(`🆕 נמצאו ${fresh.length} מיילים חדשים`, "info");
+      // Eagerly mark all fresh IDs before any async processing starts —
+      // prevents a second concurrent poll from picking up the same messages
+      fresh.forEach(m => markProcessed(`${mailProvider}-${m.id}`));
       for (const msg of fresh) {
         await processMailMessage(msg);
       }
     } catch (e) {
       addLog(`❌ שגיאת תיבת דואר: ${e.message}`, "error");
+    } finally {
+      isPollActiveRef.current = false;
     }
-  }, [mailToken, mailProvider, searchQuery, addLog, processMailMessage]);
+  }, [mailToken, mailProvider, searchQuery, addLog, markProcessed, processMailMessage]);
 
   // ─── Auto-poll loop ────────────────────────────────────────────────
   useEffect(() => {
