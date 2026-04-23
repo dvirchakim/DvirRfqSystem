@@ -4,6 +4,10 @@ An AI-powered procurement automation dashboard for **rfq Projects** — an Israe
 
 ---
 
+<img width="1868" height="563" alt="image" src="https://github.com/user-attachments/assets/fe859513-0294-43b4-a89a-7c4801a6b6c4" />
+
+
+
 ## Features
 
 | Feature | Description |
