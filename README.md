@@ -24,16 +24,28 @@ An AI-powered procurement automation dashboard for **rfq Projects** — an Israe
 
 ## Quick Start
 
-### Option A — Docker (recommended)
+### One-liner deploy (Docker)
 
 ```bash
-cd dashboard-app
+curl -fsSL https://raw.githubusercontent.com/dvirchakim/DvirRfqSystem/main/deploy.sh | bash
+```
+
+Opens at **http://localhost:8080** when done. Requires [Docker Desktop](https://docker.com).
+
+To use a different port:
+```bash
+PORT=3000 bash <(curl -fsSL https://raw.githubusercontent.com/dvirchakim/DvirRfqSystem/main/deploy.sh)
+```
+
+### Option B — Clone and run manually
+
+```bash
+git clone https://github.com/dvirchakim/DvirRfqSystem.git
+cd DvirRfqSystem/dashboard-app
 docker compose up -d
 ```
 
-Open **http://localhost:8080**
-
-### Option B — Local dev server
+### Option C — Local dev server
 
 ```bash
 cd dashboard-app

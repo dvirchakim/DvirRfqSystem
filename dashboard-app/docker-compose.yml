@@ -6,5 +6,5 @@ services:
     image: rfq-dashboard:latest
     container_name: rfq-dashboard
     ports:
-      - "8080:80"
+      - "${PORT:-8080}:80"
     restart: unless-stopped
