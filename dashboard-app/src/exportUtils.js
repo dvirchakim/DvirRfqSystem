@@ -9,18 +9,18 @@ const STATUS_COLORS = {
 
 export function exportToExcel(rfqs) {
   const rows = rfqs.map(r => ({
-    'שם לקוח':        r.customerName  || '',
-    'מק״ט יצרן':      r.partNumber    || '',
-    'כמות':           r.quantity      ?? '',
-    'תאריך אספקה':    r.deliveryDate  || '',
-    'מוכן לתחליפי':   r.acceptsAlternatives || '',
-    'מחיר מטרה ($)':  r.targetPrice   != null ? r.targetPrice : '',
-    'דרישות מיוחדות': r.specialRequirements || '',
-    'אובסולייט':      r.isObsolete    ? 'כן' : 'לא',
-    'סטטוס':          r.status        || '',
-    'עדיפות':         r.priority      || '',
-    'שולח':           r.sender        || '',
-    'תאריך עיבוד':    r.createdAt ? new Date(r.createdAt).toLocaleDateString('he-IL') : '',
+    'Customer':           r.customerName  || '',
+    'Part Number':        r.partNumber    || '',
+    'Quantity':           r.quantity      ?? '',
+    'Delivery Date':      r.deliveryDate  || '',
+    'Accepts Alts':       r.acceptsAlternatives || '',
+    'Target Price ($)':   r.targetPrice   != null ? r.targetPrice : '',
+    'Special Requirements': r.specialRequirements || '',
+    'Obsolete':           r.isObsolete    ? 'Yes' : 'No',
+    'Status':             r.status        || '',
+    'Priority':           r.priority      || '',
+    'Sender':             r.sender        || '',
+    'Processed At':       r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-GB') : '',
   }));
 
   const wb = XLSX.utils.book_new();
@@ -42,7 +42,7 @@ export function exportToPDF(rfqs) {
     const color = STATUS_COLORS[r.status] || '#888';
     return `
       <tr style="${r.isObsolete ? 'background:#fff8e1' : ''}">
-        <td style="${r.priority === 'high' ? 'border-right:3px solid #ef4444' : ''}">${r.customerName}</td>
+        <td style="${r.priority === 'high' ? 'border-left:3px solid #ef4444' : ''}">${r.customerName}</td>
         <td class="mono">${r.partNumber}${r.isObsolete ? ' <b style="color:#e65100;font-size:8px">OBS</b>' : ''}</td>
         <td class="center">${r.quantity?.toLocaleString() ?? ''}</td>
         <td>${r.deliveryDate || '—'}</td>
@@ -54,22 +54,22 @@ export function exportToPDF(rfqs) {
   }).join('');
 
   const html = `<!DOCTYPE html>
-<html dir="rtl" lang="he">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>rfq RFQ Report</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:Arial,Helvetica,sans-serif;font-size:11px;direction:rtl;padding:14px;color:#1a1a2e}
+    body{font-family:Arial,Helvetica,sans-serif;font-size:11px;padding:14px;color:#1a1a2e}
     .header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid #1a1a2e}
     .logo{font-size:17px;font-weight:800;letter-spacing:-.5px}.logo span{color:#38BDF8}
     .meta{font-size:9px;color:#666;margin-top:3px}
     table{width:100%;border-collapse:collapse}
     thead tr{background:#1a1a2e;color:#fff}
-    th{padding:6px 8px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;text-align:right}
+    th{padding:6px 8px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;text-align:left}
     td{padding:5px 8px;border-bottom:1px solid #e8eaf0;vertical-align:top}
     tr:nth-child(even):not([style]){background:#f9fafb}
-    .mono{font-family:monospace;direction:ltr;text-align:left}
+    .mono{font-family:monospace}
     .center{text-align:center}
     .small{font-size:9px;color:#555}
     .footer{margin-top:12px;font-size:8px;color:#aaa;text-align:center;border-top:1px solid #eee;padding-top:8px}
@@ -80,17 +80,17 @@ export function exportToPDF(rfqs) {
   <div class="header">
     <div>
       <div class="logo">rfq <span>RFQ</span> REPORT</div>
-      <div class="meta">${rfqs.length} פריטים | הופק: ${new Date().toLocaleString('he-IL')}</div>
+      <div class="meta">${rfqs.length} items · Generated: ${new Date().toLocaleString('en-GB')}</div>
     </div>
-    <div class="meta" style="text-align:left">
+    <div class="meta">
       🔴 High &nbsp; 🟡 Medium &nbsp; 🟢 Low &nbsp; | &nbsp; <b style="color:#e65100">OBS</b> = Obsolete
     </div>
   </div>
   <table>
     <thead>
       <tr>
-        <th>שם לקוח</th><th>מק״ט יצרן</th><th>כמות</th><th>ת. אספקה</th>
-        <th>תחליפי</th><th>מחיר מטרה</th><th>דרישות מיוחדות</th><th>סטטוס</th>
+        <th>Customer</th><th>Part Number</th><th>Qty</th><th>Delivery Date</th>
+        <th>Alts?</th><th>Target Price</th><th>Special Requirements</th><th>Status</th>
       </tr>
     </thead>
     <tbody>${rows}</tbody>
@@ -102,7 +102,7 @@ export function exportToPDF(rfqs) {
 
   const win = window.open('', '_blank');
   if (!win) {
-    alert('אפשר חלונות popup בדפדפן זה כדי לייצא PDF');
+    alert('Please allow popups in your browser to export PDF');
     return;
   }
   win.document.write(html);

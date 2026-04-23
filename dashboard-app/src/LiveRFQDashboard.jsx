@@ -65,14 +65,14 @@ const EyeIcon     = (p) => <Icon {...p} d={<><path d="M1 12s4-8 11-8 11 8 11 8-4
 
 // ─── Constants ──────────────────────────────────────────────────────────
 const STATUS = {
-  new: { label: "חדש", labelEn: "New", color: "#38BDF8", bg: "#38BDF810" },
-  processing: { label: "מעבד", labelEn: "Processing", color: "#FBBF24", bg: "#FBBF2410" },
-  parsed: { label: "עובד", labelEn: "Parsed", color: "#A78BFA", bg: "#A78BFA10" },
-  ready: { label: "מוכן להפצה", labelEn: "Ready", color: "#34D399", bg: "#34D39910" },
-  distributed: { label: "הופץ", labelEn: "Distributed", color: "#F472B6", bg: "#F472B610" },
-  awaiting: { label: "ממתין", labelEn: "Awaiting", color: "#FB923C", bg: "#FB923C10" },
-  completed: { label: "הושלם", labelEn: "Done", color: "#4ADE80", bg: "#4ADE8010" },
-  error: { label: "שגיאה", labelEn: "Error", color: "#F87171", bg: "#F8717110" },
+  new:         { label: "New",         color: "#38BDF8", bg: "#38BDF810" },
+  processing:  { label: "Processing",  color: "#FBBF24", bg: "#FBBF2410" },
+  parsed:      { label: "Parsed",      color: "#A78BFA", bg: "#A78BFA10" },
+  ready:       { label: "Ready",       color: "#34D399", bg: "#34D39910" },
+  distributed: { label: "Distributed", color: "#F472B6", bg: "#F472B610" },
+  awaiting:    { label: "Awaiting",    color: "#FB923C", bg: "#FB923C10" },
+  completed:   { label: "Done",        color: "#4ADE80", bg: "#4ADE8010" },
+  error:       { label: "Error",       color: "#F87171", bg: "#F8717110" },
 };
 
 const PARSE_PROMPT = `You are an RFQ (Request for Quote) email parser for rfq Projects, an electronic components distributor in Israel.
@@ -85,7 +85,7 @@ You MUST extract exactly these 8 fields for each part requested. Respond ONLY in
       "partNumber": "string - מק״ט יצרן / manufacturer part number (e.g. TPS61045DRBR, IRFS4610TRLPBF). This is the most important field.",
       "quantity": "number - כמות מבוקשת. Parse numbers like '10,000', '21600 י\"ח', '25K' correctly.",
       "deliveryDate": "string or null - תאריך אספקה מבוקש ע״י הלקוח. Look for dates like '05/04/2026', 'נדרש למאי', 'תוך 3 שבועות'. Return in DD/MM/YYYY format if possible, or the original Hebrew text.",
-      "acceptsAlternatives": "string - האם הלקוח מוכן לתחליפי? One of: 'כן' (yes), 'לא' (no), 'לא צוין' (not specified). Look for clues like 'תחליפי', 'חלופי', 'equivalent', 'alternative', 'cross reference'. If the part is marked obsolete, assume 'לא צוין' unless explicitly stated.",
+      "acceptsAlternatives": "string - Does the customer accept alternative parts? One of: 'Yes', 'No', 'Not specified'. Look for clues like 'תחליפי', 'חלופי', 'equivalent', 'alternative', 'cross reference'. If the part is marked obsolete, assume 'Not specified' unless explicitly stated.",
       "targetPrice": "number or null - מחיר מטרה בדולר. Parse from formats like '1.200', '0.78$', '$33', '8.80$ t/p'. Return just the number or null if not mentioned.",
       "specialRequirements": "string or null - דרישות מיוחדות. Include: obsolete status, date code limits (e.g. 'DC עד 3 שנים'), lab reports needed (e.g. 'דוח מעבדת GETS'), certifications, specific packaging, annual quantities, or any other special notes.",
       "isObsolete": "boolean - true if the part is described as obsolete, discontinued, end-of-life, or no longer manufactured. Detect ALL of these variants (including typos and Hebrew): אובסולייט, אובסולייטית, אובסולט, אובסלט, אובסולת, obs, obsolete, obsolte, obslete, absolete, obsol., EOL, end-of-life, end of life, NRND, not recommended for new designs, PDN, product discontinuation notice, discontinued, last time buy, LTB, no longer manufactured, NLM, הופסק, אין יותר בייצור. Default false if none of these appear."
@@ -93,17 +93,17 @@ You MUST extract exactly these 8 fields for each part requested. Respond ONLY in
   ],
   "sender": "string - name of the rfq salesperson who forwarded the request",
   "priority": "high|medium|low - high if: obsolete, urgent delivery, large qty (>5000), or military/defense customer. medium: standard. low: small qty, flexible timeline.",
-  "summary": "string - one line Hebrew summary of the entire request"
+  "summary": "string - one line English summary of the entire request"
 }
 
 IMPORTANT RULES:
 - If multiple parts are in one email, list ALL of them in the parts array.
 - For the customerName: look for company names after words like 'לקוח', 'מיועד ל', or in table headers like 'שם לקוח'. Common customers: Acme Corp, Contoso Semi, Wayne Optics Ltd, Globex Ltd, Acme Corp, Contoso Semi, Northwind Medical, HP, Globex Ltd.
 - For deliveryDate: look for 'ת. אספקה', 'נדרש ל', 'תאריך נדרש', or date columns in tables.
-- For acceptsAlternatives: default to 'לא צוין' unless the email explicitly discusses alternatives.
+- For acceptsAlternatives: default to 'Not specified' unless the email explicitly discusses alternatives.
 - For specialRequirements: combine ALL special notes — obsolete status, DC limits, lab reports, annual qty info, etc.
 - For isObsolete: when in doubt lean toward true — a false negative (missing an obsolete flag) is worse than a false positive.
-- Never invent data. If a field is genuinely not in the email, use null or 'לא צוין' as appropriate.`;
+- Never invent data. If a field is genuinely not in the email, use null or 'Not specified' as appropriate.`;
 
 // ─── Gmail search via MCP in Claude API ─────────────────────────────────
 async function searchGmail(query) {
@@ -301,7 +301,7 @@ export default function LiveRFQDashboard() {
   const addLog = useCallback((message, type = "info", detail = null) => {
     setLogs(prev => [{
       id: Date.now() + Math.random(),
-      time: new Date().toLocaleTimeString("he-IL"),
+      time: new Date().toLocaleTimeString("en-GB"),
       message,
       type,
       detail, // raw error object / API response — shown in verbose mode
@@ -321,7 +321,7 @@ export default function LiveRFQDashboard() {
     const subjectMatch = emailText.match(/^Subject:\s*(.+)$/im);
     const originalSubject = subjectMatch ? subjectMatch[1].trim() : '';
 
-    addLog(`🔄 מעבד מייל: ${emailId?.substring(0, 30)}...`, "info");
+    addLog(`🔄 Processing email: ${emailId?.substring(0, 30)}...`, "info");
     setIsProcessing(true);
 
     try {
@@ -334,10 +334,10 @@ export default function LiveRFQDashboard() {
       if (!result || typeof result === 'object') {
         const err = result && result.error;
         const msg = err === 'missing_key'
-          ? 'הזן API Key בהגדרות לפני עיבוד'
+          ? 'Enter an API Key in Settings before processing'
           : err === 'missing_base_url'
-            ? 'חסר Base URL לספק OpenAI-compatible'
-            : `שגיאה בעיבוד מייל: ${err || 'unknown'}`;
+            ? 'Missing Base URL for OpenAI-compatible provider'
+            : `Email processing error: ${err || 'unknown'}`;
         addLog(`❌ ${msg}`, "error", result);
         setStats(p => ({ ...p, errors: p.errors + 1 }));
         setIsProcessing(false);
@@ -348,7 +348,7 @@ export default function LiveRFQDashboard() {
       try {
         parsed = JSON.parse(result);
       } catch (parseErr) {
-        addLog(`⚠️ תוצאת AI לא תקינה — JSON parse נכשל`, "warning", { raw: result, error: parseErr?.message });
+        addLog(`⚠️ Invalid AI response — JSON parse failed`, "warning", { raw: result, error: parseErr?.message });
         setIsProcessing(false);
         return null;
       }
@@ -361,7 +361,7 @@ export default function LiveRFQDashboard() {
         partNumber:          part.partNumber   || "N/A",
         quantity:            part.quantity     || 0,
         deliveryDate:        part.deliveryDate || null,
-        acceptsAlternatives: part.acceptsAlternatives || "לא צוין",
+        acceptsAlternatives: part.acceptsAlternatives || "Not specified",
         targetPrice:         part.targetPrice  ?? null,
         specialRequirements: part.specialRequirements || null,
         isObsolete:          part.isObsolete === true,
@@ -384,7 +384,7 @@ export default function LiveRFQDashboard() {
 
       const obsCount = newRfqs.filter(r => r.isObsolete).length;
       addLog(
-        `✅ חולצו ${newRfqs.length} רכיבים${obsCount ? ` · ${obsCount} OBS` : ''} — ${parsed.summary || ""}`,
+        `✅ Extracted ${newRfqs.length} part(s)${obsCount ? ` · ${obsCount} OBS` : ''} — ${parsed.summary || ""}`,
         "success"
       );
 
@@ -398,15 +398,15 @@ export default function LiveRFQDashboard() {
             .map(r => `<li><b>${r.partNumber}</b> — ${r.customerName}</li>`)
             .join('');
           const followSubject = originalSubject
-            ? `Re: ${originalSubject} — נדרש תאריך אספקה`
-            : 'נדרש תאריך אספקה לבקשת הצעת המחיר';
-          const followBody = `<div dir="rtl" style="font-family:Arial,sans-serif;font-size:13px">
-<p>שלום,</p>
-<p>תודה על בקשת הצעת המחיר.</p>
-<p>על מנת שנוכל לטפל בבקשה ביעילות, נבקש לקבל את <strong>תאריך האספקה הנדרש</strong> עבור הרכיבים הבאים:</p>
+            ? `Re: ${originalSubject} — Delivery date required`
+            : 'Delivery date required for your RFQ';
+          const followBody = `<div style="font-family:Arial,sans-serif;font-size:13px">
+<p>Hello,</p>
+<p>Thank you for your request for quotation.</p>
+<p>In order to process your request efficiently, we need the <strong>required delivery date</strong> for the following parts:</p>
 <ul>${partsList}</ul>
-<p>האם תוכל/י לציין את המועד הנדרש?</p>
-<p>תודה רבה,<br>צוות רכש — rfq Projects</p>
+<p>Could you please specify the required delivery date?</p>
+<p>Thank you,<br>Procurement Team — rfq Projects</p>
 </div>`;
           if (mailProvider === 'gmail') {
             await gmailSendMessage(mailToken, fromEmail, followSubject, followBody);
@@ -414,16 +414,16 @@ export default function LiveRFQDashboard() {
             const freshToken = await acquireOutlookToken(msClientId, msTenantId).catch(() => mailToken);
             await outlookSendMessage(freshToken, fromEmail, followSubject, followBody);
           }
-          addLog(`📤 follow-up נשלח → ${fromEmail} (${missingDate.length} רכיב/ים ללא תאריך)`, "info");
+          addLog(`📤 Follow-up sent → ${fromEmail} (${missingDate.length} part(s) missing delivery date)`, "info");
         } catch (sendErr) {
-          addLog(`⚠️ שליחת follow-up נכשלה: ${sendErr.message}`, "warning", sendErr);
+          addLog(`⚠️ Follow-up send failed: ${sendErr.message}`, "warning", sendErr);
         }
       }
 
       setIsProcessing(false);
       return newRfqs;
     } catch (e) {
-      addLog(`❌ שגיאה: ${e.message}`, "error", e);
+      addLog(`❌ Error: ${e.message}`, "error", e);
       setStats(p => ({ ...p, errors: p.errors + 1 }));
       setIsProcessing(false);
       return null;
@@ -435,26 +435,26 @@ export default function LiveRFQDashboard() {
     try {
       setMailLoading(true);
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      addLog(`🌐 Origin נוכחי: ${origin} (ודא שהוא רשום ב-OAuth client)`, "info");
+      addLog(`🌐 Current origin: ${origin} (make sure it is registered in your OAuth client)`, "info");
       if (mailProvider === 'gmail') {
-        if (!googleClientId) { addLog("❌ חסר Google Client ID בהגדרות", "error"); setMailLoading(false); return; }
+        if (!googleClientId) { addLog("❌ Missing Google Client ID in Settings", "error"); setMailLoading(false); return; }
         const token = await gmailSignIn(googleClientId);
         setMailToken(token);
-        addLog("✅ מחובר ל-Gmail", "success");
+        addLog("✅ Connected to Gmail", "success");
       } else {
-        if (!msClientId) { addLog("❌ חסר Microsoft Client ID בהגדרות", "error"); setMailLoading(false); return; }
+        if (!msClientId) { addLog("❌ Missing Microsoft Client ID in Settings", "error"); setMailLoading(false); return; }
         const token = await outlookSignIn(msClientId, msTenantId);
         setMailToken(token);
-        addLog("✅ מחובר ל-Outlook", "success");
+        addLog("✅ Connected to Outlook", "success");
       }
     } catch (e) {
       const msg = e?.errorCode || e?.message || String(e);
       let hint = '';
-      if (/popup_window_error|popup_window_blocked|blocked/i.test(msg)) hint = ' — הדפדפן חסם את ה-popup. אפשר popups לאתר זה בשורת הכתובת.';
-      else if (/user_cancelled/i.test(msg)) hint = ' — המשתמש סגר את החלון.';
-      else if (/AADSTS50194/i.test(msg)) hint = ' — האפליקציה single-tenant. מלא Tenant ID או הפוך ל-multi-tenant.';
-      else if (/AADSTS|invalid_client|unauthorized_client/i.test(msg)) hint = ' — שגיאת הגדרת app ב-Entra (Client ID / Redirect URI / Scopes).';
-      addLog(`❌ חיבור נכשל: ${msg}${hint}`, "error");
+      if (/popup_window_error|popup_window_blocked|blocked/i.test(msg)) hint = ' — Browser blocked the popup. Allow popups for this site in the address bar.';
+      else if (/user_cancelled/i.test(msg)) hint = ' — User closed the sign-in window.';
+      else if (/AADSTS50194/i.test(msg)) hint = ' — App is single-tenant. Fill in Tenant ID or switch to multi-tenant.';
+      else if (/AADSTS|invalid_client|unauthorized_client/i.test(msg)) hint = ' — App configuration error in Entra (Client ID / Redirect URI / Scopes).';
+      addLog(`❌ Connection failed: ${msg}${hint}`, "error");
       console.error("[mail connect]", e);
     } finally {
       setMailLoading(false);
@@ -466,29 +466,29 @@ export default function LiveRFQDashboard() {
     setMailToken(null);
     setMailMessages([]);
     if (msClientId) initOutlook(msClientId, msTenantId).catch(err => console.error("[msal re-init]", err));
-    addLog("🧹 מטמון MSAL נוקה — נסה להתחבר שוב", "info");
+    addLog("🧹 MSAL cache cleared — try connecting again", "info");
   }, [msClientId, msTenantId, addLog]);
 
   const refreshMailbox = useCallback(async () => {
-    if (!mailToken) { addLog("⚠️ התחבר לתיבת דואר תחילה", "warning"); return; }
+    if (!mailToken) { addLog("⚠️ Connect your mailbox first", "warning"); return; }
     setMailLoading(true);
     try {
       const list = mailProvider === 'gmail'
         ? await gmailListMessages(mailToken, mailSearch, 25)
         : await outlookListMessages(mailToken, mailSearch, 25);
       setMailMessages(list);
-      addLog(`📬 נטענו ${list.length} מיילים מ-${mailProvider}`, "info");
+      addLog(`📬 Loaded ${list.length} messages from ${mailProvider}`, "info");
     } catch (e) {
-      addLog(`❌ טעינת רשימה נכשלה: ${e.message}`, "error");
+      addLog(`❌ Failed to load message list: ${e.message}`, "error");
     } finally {
       setMailLoading(false);
     }
   }, [mailProvider, mailToken, mailSearch, addLog]);
 
   const processMailMessage = useCallback(async (msg) => {
-    if (!providerReady) { addLog("⚠️ הגדר ספק LLM בהגדרות תחילה", "warning"); return; }
+    if (!providerReady) { addLog("⚠️ Configure an LLM provider in Settings first", "warning"); return; }
     try {
-      addLog(`🔍 טוען מייל: ${msg.subject}`, "info");
+      addLog(`🔍 Loading email: ${msg.subject}`, "info");
       let text;
       if (mailProvider === 'gmail') {
         const raw = await gmailFetchRaw(mailToken, msg.id);
@@ -503,7 +503,7 @@ export default function LiveRFQDashboard() {
       }
       await processEmail(text, `${mailProvider}-${msg.id}`);
     } catch (e) {
-      addLog(`❌ עיבוד נכשל: ${e.message}`, "error");
+      addLog(`❌ Processing failed: ${e.message}`, "error");
     }
   }, [mailProvider, mailToken, msClientId, processEmail, providerReady, addLog]);
 
@@ -515,47 +515,47 @@ export default function LiveRFQDashboard() {
     } catch {}
     setMailToken(null);
     setMailMessages([]);
-    addLog(`🔌 נותק מ-${mailProvider}`, "info");
+    addLog(`🔌 Disconnected from ${mailProvider}`, "info");
   }, [mailProvider, msClientId, addLog]);
 
   // ─── Load example .eml into the test textarea ─────────────────────
   const loadExample = useCallback(async (filename) => {
     if (!filename) return;
     try {
-      addLog(`📥 טוען דוגמה: ${filename}`, "info");
+      addLog(`📥 Loading example: ${filename}`, "info");
       const res = await fetch(`/example-mails/${encodeURIComponent(filename)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const raw = await res.text();
       const parsed = parseEml(raw);
       setTestEmail(parsed.formatted);
       setActiveTab('test');
-      addLog(`✅ נטען: ${parsed.subject || filename}`, "success");
+      addLog(`✅ Loaded: ${parsed.subject || filename}`, "success");
     } catch (e) {
-      addLog(`❌ טעינה נכשלה: ${e.message}`, "error");
+      addLog(`❌ Load failed: ${e.message}`, "error");
     }
   }, [addLog]);
 
   // ─── Poll real mailbox (Gmail or Outlook) ─────────────────────────
   const pollGmail = useCallback(async () => {
     if (!mailToken) {
-      addLog("⚠️ התחבר לתיבת דואר (Inbox) לפני הפעלת המערכת", "warning");
+      addLog("⚠️ Connect your mailbox (Inbox) before starting the system", "warning");
       return;
     }
     // Prevent concurrent poll runs — skip if previous poll still in progress
     if (isPollActiveRef.current) {
-      addLog("⏭ סבב קודם עדיין פעיל — מדלג", "info");
+      addLog("⏭ Previous poll still active — skipping", "info");
       return;
     }
     isPollActiveRef.current = true;
-    addLog(`📬 בודק ${mailProvider}...`, "info");
-    setStats(p => ({ ...p, lastCheck: new Date().toLocaleTimeString("he-IL") }));
+    addLog(`📬 Checking ${mailProvider}...`, "info");
+    setStats(p => ({ ...p, lastCheck: new Date().toLocaleTimeString("en-GB") }));
     try {
       const list = mailProvider === 'gmail'
         ? await gmailListMessages(mailToken, searchQuery, 10)
         : await outlookListMessages(mailToken, searchQuery, 10);
       const fresh = list.filter(m => !processedIdsRef.current.has(`${mailProvider}-${m.id}`));
-      if (fresh.length === 0) { addLog("📭 אין מיילים חדשים", "info"); return; }
-      addLog(`🆕 נמצאו ${fresh.length} מיילים חדשים`, "info");
+      if (fresh.length === 0) { addLog("📭 No new emails", "info"); return; }
+      addLog(`🆕 Found ${fresh.length} new email(s)`, "info");
       // Eagerly mark all fresh IDs before any async processing starts —
       // prevents a second concurrent poll from picking up the same messages
       fresh.forEach(m => markProcessed(`${mailProvider}-${m.id}`));
@@ -563,7 +563,7 @@ export default function LiveRFQDashboard() {
         await processMailMessage(msg);
       }
     } catch (e) {
-      addLog(`❌ שגיאת תיבת דואר: ${e.message}`, "error");
+      addLog(`❌ Mailbox error: ${e.message}`, "error");
     } finally {
       isPollActiveRef.current = false;
     }
@@ -610,7 +610,7 @@ export default function LiveRFQDashboard() {
         from: r.status,
         to: prevStatus,
         comment,
-        ts: new Date().toLocaleTimeString("he-IL"),
+        ts: new Date().toLocaleTimeString("en-GB"),
       };
       return {
         ...r,
@@ -618,7 +618,7 @@ export default function LiveRFQDashboard() {
         statusHistory: [...(r.statusHistory || []), histEntry],
       };
     }));
-    addLog(`◂ חזרה שלב — ${rfqId.slice(-8)}: "${comment}"`, "info");
+    addLog(`◂ Step back — ${rfqId.slice(-8)}: "${comment}"`, "info");
     setBackModal(null);
     setBackComment('');
   }, [addLog]);
@@ -658,16 +658,16 @@ export default function LiveRFQDashboard() {
   // ─── Send RFQ to all suppliers in the list ─────────────────────────
   const sendToSuppliers = useCallback(async (rfq) => {
     if (!mailToken) {
-      addLog("⚠️ התחבר לתיבת דואר לפני שליחה לספקים", "warning");
+      addLog("⚠️ Connect your mailbox before sending to suppliers", "warning");
       return;
     }
     if (!supplierList.length) {
-      addLog("⚠️ הוסף ספקים ברשימה (הגדרות → רשימת ספקים)", "warning");
+      addLog("⚠️ Add suppliers in Settings → Supplier List", "warning");
       return;
     }
     // Block if human-loop flag is set
     if (rfq.humanLoop) {
-      addLog(`🔍 RFQ ${rfq.partNumber} מסומן לבדיקה ידנית — הסר את הדגל לפני שליחה`, "warning");
+      addLog(`🔍 RFQ ${rfq.partNumber} is flagged for manual review — remove the flag before sending`, "warning");
       return;
     }
     setSendingSuppliers(true);
@@ -682,15 +682,15 @@ export default function LiveRFQDashboard() {
           const freshToken = await acquireOutlookToken(msClientId, msTenantId).catch(() => mailToken);
           await outlookSendMessage(freshToken, sup.email, subject, body);
         }
-        addLog(`📤 נשלח ל-${sup.name} <${sup.email}>`, "success");
+        addLog(`📤 Sent to ${sup.name} <${sup.email}>`, "success");
         sent++;
       } catch (e) {
-        addLog(`❌ שליחה ל-${sup.email} נכשלה: ${e.message}`, "error", e);
+        addLog(`❌ Send to ${sup.email} failed: ${e.message}`, "error", e);
       }
     }
     if (sent > 0) {
       advanceStatus(rfq.id); // → distributed
-      addLog(`✅ RFQ ${rfq.partNumber} הופץ ל-${sent}/${supplierList.length} ספקים`, "success");
+      addLog(`✅ RFQ ${rfq.partNumber} distributed to ${sent}/${supplierList.length} supplier(s)`, "success");
     }
     setSendingSuppliers(false);
   }, [mailToken, mailProvider, msClientId, msTenantId, supplierList, addLog, buildSupplierEmail, advanceStatus]);
@@ -701,19 +701,19 @@ export default function LiveRFQDashboard() {
     const email = newSupplierEmail.trim().toLowerCase();
     if (!name || !email || !email.includes('@')) return;
     if (supplierList.some(s => s.email === email)) {
-      addLog(`⚠️ ${email} כבר קיים ברשימה`, "warning");
+      addLog(`⚠️ ${email} already exists in the supplier list`, "warning");
       return;
     }
     setSupplierList(prev => [...prev, { name, email }]);
     setNewSupplierName('');
     setNewSupplierEmail('');
-    addLog(`➕ ספק נוסף: ${name} <${email}>`, "success");
+    addLog(`➕ Supplier added: ${name} <${email}>`, "success");
   }, [newSupplierName, newSupplierEmail, supplierList, addLog]);
 
   const removeSupplier = useCallback((idx) => {
     setSupplierList(prev => {
       const removed = prev[idx];
-      addLog(`🗑 ספק הוסר: ${removed?.name}`, "info");
+      addLog(`🗑 Supplier removed: ${removed?.name}`, "info");
       return prev.filter((_, i) => i !== idx);
     });
   }, [addLog]);
@@ -722,15 +722,15 @@ export default function LiveRFQDashboard() {
   const loadSupplierMail = useCallback(async (filename) => {
     if (!filename) return;
     try {
-      addLog(`📥 טוען תגובת ספק: ${filename}`, "info");
+      addLog(`📥 Loading supplier response: ${filename}`, "info");
       const res = await fetch(`/supplier-mails/${encodeURIComponent(filename)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const raw = await res.text();
       const parsed = parseEml(raw);
       setTestSupplierText(parsed.formatted);
-      addLog(`✅ נטען: ${parsed.subject || filename}`, "success");
+      addLog(`✅ Loaded: ${parsed.subject || filename}`, "success");
     } catch (e) {
-      addLog(`❌ טעינת ספק נכשלה: ${e.message}`, "error", e);
+      addLog(`❌ Failed to load supplier mail: ${e.message}`, "error", e);
     }
   }, [addLog]);
 
@@ -748,7 +748,7 @@ export default function LiveRFQDashboard() {
       );
 
       if (!result || typeof result === 'object') {
-        addLog(`❌ עיבוד תגובת ספק נכשל: ${result?.error || 'unknown'}`, "error", result);
+        addLog(`❌ Supplier response processing failed: ${result?.error || 'unknown'}`, "error", result);
         setTestSupplierProcessing(false);
         return;
       }
@@ -757,7 +757,7 @@ export default function LiveRFQDashboard() {
       try {
         parsed = JSON.parse(result);
       } catch (parseErr) {
-        addLog(`⚠️ JSON לא תקין מתגובת ספק`, "warning", { raw: result, error: parseErr?.message });
+        addLog(`⚠️ Invalid JSON from supplier response`, "warning", { raw: result, error: parseErr?.message });
         setTestSupplierProcessing(false);
         return;
       }
@@ -770,7 +770,7 @@ export default function LiveRFQDashboard() {
         ...parsed,
         score,
         rfqId:      testSupplierLinkRfqId || null,
-        receivedAt: new Date().toLocaleTimeString("he-IL"),
+        receivedAt: new Date().toLocaleTimeString("en-GB"),
       };
 
       setTestSupplierResult(entry);
@@ -786,12 +786,12 @@ export default function LiveRFQDashboard() {
             status: r.status === 'distributed' ? 'awaiting' : r.status,
           };
         }));
-        addLog(`📊 תגובת ספק קושרה ל-${linkedRfq?.partNumber || testSupplierLinkRfqId} — ניקוד: ${score}`, "success");
+        addLog(`📊 Supplier response linked to ${linkedRfq?.partNumber || testSupplierLinkRfqId} — score: ${score}`, "success");
       } else {
-        addLog(`📊 תגובת ספק עובדה — ניקוד: ${score}`, "success");
+        addLog(`📊 Supplier response processed — score: ${score}`, "success");
       }
     } catch (e) {
-      addLog(`❌ שגיאה בעיבוד תגובת ספק: ${e.message}`, "error", e);
+      addLog(`❌ Error processing supplier response: ${e.message}`, "error", e);
     }
 
     setTestSupplierProcessing(false);
@@ -835,7 +835,7 @@ export default function LiveRFQDashboard() {
       color: "var(--text)",
       minHeight: "100vh",
       fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', monospace",
-      direction: "rtl",
+      direction: "ltr",
       fontSize: 13,
     }}>
       <style>{`
@@ -896,14 +896,14 @@ export default function LiveRFQDashboard() {
 
           {stats.lastCheck && (
             <span style={{ fontSize: 10, color: "var(--text3)" }}>
-              בדיקה אחרונה: {stats.lastCheck}
+              Last check: {stats.lastCheck}
             </span>
           )}
 
           {/* Provider badge */}
           <button
             onClick={() => setActiveTab('config')}
-            title="שנה ספק LLM בהגדרות"
+            title="Change LLM provider in Settings"
             style={{
               padding: "6px 10px", borderRadius: 8,
               background: providerReady ? "var(--surface2)" : "#F8717120",
@@ -919,7 +919,7 @@ export default function LiveRFQDashboard() {
           {/* Theme toggle */}
           <button
             onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
-            title={theme === 'dark' ? 'מצב בהיר' : 'מצב כהה'}
+            title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
             style={{
               display: "flex", alignItems: "center", justifyContent: "center",
               width: 34, height: 34, borderRadius: 8,
@@ -974,12 +974,12 @@ export default function LiveRFQDashboard() {
             {/* KPI strip */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 24 }}>
               {[
-                { label: "סה״כ RFQs",  value: rfqs.length,               color: "var(--accent)", icon: <InboxIcon   size={16} color="var(--accent)" /> },
-                { label: "עובדו",       value: stats.processed,            color: "var(--green)",  icon: <CheckIcon   size={16} color="var(--green)" /> },
-                { label: "ממתינים",     value: statusCounts.awaiting || 0, color: "var(--amber)",  icon: <ClockIcon   size={16} color="var(--amber)" /> },
-                { label: "שגיאות",      value: stats.errors,               color: "var(--red)",    icon: <AlertIcon   size={16} color="var(--red)" /> },
-                { label: "הושלמו",      value: statusCounts.completed || 0,color: "var(--green)",  icon: <CheckIcon   size={16} color="var(--green)" /> },
-                { label: "אובסולייט",   value: rfqs.filter(r=>r.isObsolete).length, color: "#FB923C", icon: <AlertIcon size={16} color="#FB923C" /> },
+                { label: "Total RFQs",  value: rfqs.length,               color: "var(--accent)", icon: <InboxIcon   size={16} color="var(--accent)" /> },
+                { label: "Processed",   value: stats.processed,            color: "var(--green)",  icon: <CheckIcon   size={16} color="var(--green)" /> },
+                { label: "Awaiting",    value: statusCounts.awaiting || 0, color: "var(--amber)",  icon: <ClockIcon   size={16} color="var(--amber)" /> },
+                { label: "Errors",      value: stats.errors,               color: "var(--red)",    icon: <AlertIcon   size={16} color="var(--red)" /> },
+                { label: "Completed",   value: statusCounts.completed || 0,color: "var(--green)",  icon: <CheckIcon   size={16} color="var(--green)" /> },
+                { label: "Obsolete",    value: rfqs.filter(r=>r.isObsolete).length, color: "#FB923C", icon: <AlertIcon size={16} color="#FB923C" /> },
               ].map((kpi, i) => (
                 <div key={i} style={{
                   background: "var(--surface)", border: "1px solid var(--border)",
@@ -1019,7 +1019,6 @@ export default function LiveRFQDashboard() {
                       {statusCounts[key] || 0}
                     </div>
                     <div style={{ fontSize: 9, color: "var(--text3)", marginTop: 4 }}>{st.label}</div>
-                    <div style={{ fontSize: 8, color: "var(--text3)" }}>{st.labelEn}</div>
                   </div>
                 ))}
               </div>
@@ -1039,7 +1038,7 @@ export default function LiveRFQDashboard() {
                   {/* Select-all checkbox */}
                   <input
                     type="checkbox"
-                    title="בחר/בטל הכל"
+                    title="Select / Deselect all"
                     checked={filteredRfqs.length > 0 && filteredRfqs.every(r => checkedRfqIds[r.id])}
                     onChange={e => {
                       if (e.target.checked) {
@@ -1059,21 +1058,21 @@ export default function LiveRFQDashboard() {
                   {rfqs.length > 0 && (
                     <button
                       onClick={() => {
-                        if (window.confirm(`מחק את כל ${rfqs.length} הרכיבים מהרשימה?`)) {
+                        if (window.confirm(`Delete all ${rfqs.length} RFQs from the list?`)) {
                           setRfqs([]);
                           setCheckedRfqIds({});
                           setSelectedRfq(null);
-                          addLog("🗑 רשימת RFQ נוקתה", "info");
+                          addLog("🗑 RFQ list cleared", "info");
                         }
                       }}
-                      title="מחק את כל הרכיבים מהרשימה"
+                      title="Delete all items from the list"
                       style={{
                         padding: "3px 8px", borderRadius: 6, fontSize: 9, fontWeight: 600,
                         cursor: "pointer", border: "1px solid var(--border)",
                         background: "var(--surface2)", color: "var(--text3)",
                         transition: "all 0.15s",
                       }}
-                    >🗑 נקה הכל</button>
+                    >🗑 Clear all</button>
                   )}
                   {/* Obsolete filter chip */}
                   <button
@@ -1092,7 +1091,7 @@ export default function LiveRFQDashboard() {
                   <select
                     value={filterStatus}
                     onChange={e => setFilterStatus(e.target.value)}
-                    title="סנן לפי סטטוס"
+                    title="Filter by status"
                     style={{
                       padding: "5px 10px", borderRadius: 8,
                       background: filterStatus ? "var(--surface3)" : "var(--surface2)",
@@ -1102,7 +1101,7 @@ export default function LiveRFQDashboard() {
                       fontWeight: filterStatus ? 700 : 400,
                     }}
                   >
-                    <option value="">כל הסטטוסים</option>
+                    <option value="">All statuses</option>
                     {Object.entries(STATUS).map(([key, { label, color }]) => (
                       <option key={key} value={key}>{label}</option>
                     ))}
@@ -1111,7 +1110,7 @@ export default function LiveRFQDashboard() {
                   {(filterStatus || filterText || showObsoleteOnly) && (
                     <button
                       onClick={() => { setFilterStatus(''); setFilterText(''); setShowObsoleteOnly(false); }}
-                      title="נקה כל הסינונים"
+                      title="Clear all filters"
                       style={{
                         padding: "4px 9px", borderRadius: 8, fontSize: 10,
                         background: "var(--surface2)", border: "1px solid var(--border)",
@@ -1128,7 +1127,7 @@ export default function LiveRFQDashboard() {
                     <input
                       value={filterText}
                       onChange={e => setFilterText(e.target.value)}
-                      placeholder="חיפוש..."
+                      placeholder="Search..."
                       style={{
                         background: "none", border: "none", outline: "none",
                         color: "var(--text)", fontSize: 11, width: 130,
@@ -1146,7 +1145,7 @@ export default function LiveRFQDashboard() {
                   background: "var(--surface2)",
                 }}>
                   <span style={{ fontSize: 11, color: "var(--accent)", fontWeight: 600 }}>
-                    {Object.keys(checkedRfqIds).length} נבחרו
+                    {Object.keys(checkedRfqIds).length} selected
                   </span>
                   <button
                     onClick={() => exportToExcel(rfqs.filter(r => checkedRfqIds[r.id]))}
@@ -1173,7 +1172,7 @@ export default function LiveRFQDashboard() {
                       background: "none", color: "var(--text3)",
                       border: "1px solid var(--border)", cursor: "pointer",
                     }}
-                  >✕ בטל</button>
+                  >✕ Deselect</button>
                 </div>
               )}
 
@@ -1188,14 +1187,14 @@ export default function LiveRFQDashboard() {
               }}>
                 <div></div>{/* checkbox */}
                 <div></div>{/* priority dot */}
-                <div>שם לקוח</div>
-                <div>מק״ט יצרן</div>
-                <div>כמות</div>
-                <div>ת. אספקה</div>
-                <div>תחליפי?</div>
-                <div>מחיר מטרה</div>
-                <div>דרישות מיוחדות</div>
-                <div>סטטוס</div>
+                <div>Customer</div>
+                <div>Part Number</div>
+                <div>Qty</div>
+                <div>Delivery Date</div>
+                <div>Alts?</div>
+                <div>Target Price</div>
+                <div>Special Req.</div>
+                <div>Status</div>
                 <div></div>{/* actions */}
               </div>
 
@@ -1206,8 +1205,8 @@ export default function LiveRFQDashboard() {
                     padding: "60px 20px", textAlign: "center", color: "var(--text3)",
                   }}>
                     <InboxIcon size={32} color="var(--text3)" style={{ margin: "0 auto 12px", display: "block", opacity: 0.3 }} />
-                    <div style={{ fontSize: 13, marginBottom: 6 }}>אין בקשות עדיין</div>
-                    <div style={{ fontSize: 11 }}>חבר Gmail והפעל את המערכת, או הדבק מייל בלשונית Test</div>
+                    <div style={{ fontSize: 13, marginBottom: 6 }}>No RFQs yet</div>
+                    <div style={{ fontSize: 11 }}>Connect Gmail and start the system, or paste an email in the Test tab</div>
                   </div>
                 ) : filteredRfqs.map((rfq, i) => {
                   const st = STATUS[rfq.status] || STATUS.new;
@@ -1255,12 +1254,12 @@ export default function LiveRFQDashboard() {
                           boxShadow: rfq.priority === "high" ? "0 0 8px var(--red)" : "none",
                         }} />
                         {rfq.humanLoop && (
-                          <div title="ממתין לאישור ידני" style={{ fontSize: 8, lineHeight: 1 }}>🔍</div>
+                          <div title="Awaiting manual approval" style={{ fontSize: 8, lineHeight: 1 }}>🔍</div>
                         )}
                       </div>
-                      {/* 1. שם לקוח */}
+                      {/* customer */}
                       <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text)" }}>{rfq.customerName}</div>
-                      {/* 2. מק״ט יצרן + OBS badge */}
+                      {/* part number + OBS badge */}
                       <div style={{ display: "flex", alignItems: "center", gap: 5, direction: "ltr" }}>
                         <span style={{ fontSize: 11, fontWeight: 500, color: "var(--accent)" }}>{rfq.partNumber}</span>
                         {rfq.isObsolete && (
@@ -1271,28 +1270,28 @@ export default function LiveRFQDashboard() {
                           }}>OBS</span>
                         )}
                       </div>
-                      {/* 3. כמות */}
+                      {/* quantity */}
                       <div style={{ fontSize: 11, fontWeight: 500, direction: "ltr", textAlign: "left" }}>
                         {rfq.quantity?.toLocaleString()}
                       </div>
-                      {/* 4. ת. אספקה */}
+                      {/* delivery date */}
                       <div style={{ fontSize: 10, color: rfq.deliveryDate ? "var(--text2)" : "var(--red)" }}>
-                        {rfq.deliveryDate || "⚠ חסר"}
+                        {rfq.deliveryDate || "⚠ Missing"}
                       </div>
-                      {/* 5. תחליפי */}
+                      {/* accepts alternatives */}
                       <div>
                         <span style={{
                           fontSize: 9, fontWeight: 600, padding: "2px 6px", borderRadius: 4,
-                          background: rfq.acceptsAlternatives === "כן" ? "#34D39915" : rfq.acceptsAlternatives === "לא" ? "#F8717115" : "var(--surface2)",
-                          color: rfq.acceptsAlternatives === "כן" ? "var(--green)" : rfq.acceptsAlternatives === "לא" ? "var(--red)" : "var(--text3)",
-                          border: `1px solid ${rfq.acceptsAlternatives === "כן" ? "#34D39925" : rfq.acceptsAlternatives === "לא" ? "#F8717125" : "var(--border)"}`,
+                          background: rfq.acceptsAlternatives === "Yes" ? "#34D39915" : rfq.acceptsAlternatives === "No" ? "#F8717115" : "var(--surface2)",
+                          color: rfq.acceptsAlternatives === "Yes" ? "var(--green)" : rfq.acceptsAlternatives === "No" ? "var(--red)" : "var(--text3)",
+                          border: `1px solid ${rfq.acceptsAlternatives === "Yes" ? "#34D39925" : rfq.acceptsAlternatives === "No" ? "#F8717125" : "var(--border)"}`,
                         }}>{rfq.acceptsAlternatives}</span>
                       </div>
-                      {/* 6. מחיר מטרה */}
+                      {/* target price */}
                       <div style={{ fontSize: 11, direction: "ltr", textAlign: "left", color: rfq.targetPrice != null ? "var(--text)" : "var(--text3)" }}>
                         {rfq.targetPrice != null ? `$${rfq.targetPrice}` : "—"}
                       </div>
-                      {/* 7. דרישות מיוחדות */}
+                      {/* special requirements */}
                       <div style={{
                         fontSize: 9, color: rfq.specialRequirements ? "var(--amber)" : "var(--text3)",
                         whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
@@ -1311,7 +1310,7 @@ export default function LiveRFQDashboard() {
                       >
                         {rfq.status !== 'new' && (
                           <button
-                            title="חזרה שלב (נדרשת סיבה)"
+                            title="Step back (reason required)"
                             onClick={() => { setBackModal({ rfqId: rfq.id }); setBackComment(''); }}
                             style={{
                               background: "var(--surface2)", border: "1px solid var(--border)",
@@ -1322,7 +1321,7 @@ export default function LiveRFQDashboard() {
                         )}
                         {rfq.status !== 'completed' && (
                           <button
-                            title="קדם שלב"
+                            title="Advance status"
                             onClick={() => advanceStatus(rfq.id)}
                             style={{
                               background: "var(--surface2)", border: "1px solid var(--border)",
@@ -1332,7 +1331,7 @@ export default function LiveRFQDashboard() {
                           >▸</button>
                         )}
                         <button
-                          title="מחק רכיב זה מהרשימה"
+                          title="Delete this item"
                           onClick={() => {
                             setRfqs(prev => prev.filter(r => r.id !== rfq.id));
                             if (selectedRfq?.id === rfq.id) setSelectedRfq(null);
@@ -1401,10 +1400,10 @@ export default function LiveRFQDashboard() {
                 {/* ── 8 fields grid ── */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
                   {[
-                    { l: "1. שם לקוח",      v: sr.customerName,             c: "var(--text)" },
-                    { l: "2. מק״ט יצרן",    v: sr.partNumber,               c: "var(--accent)", ltr: true },
-                    { l: "3. כמות",          v: sr.quantity?.toLocaleString(),c: "var(--text)" },
-                    { l: "4. תאריך אספקה",  v: sr.deliveryDate || "⚠ לא צוין",
+                    { l: "1. Customer",      v: sr.customerName,             c: "var(--text)" },
+                    { l: "2. Part Number",   v: sr.partNumber,               c: "var(--accent)", ltr: true },
+                    { l: "3. Quantity",      v: sr.quantity?.toLocaleString(),c: "var(--text)" },
+                    { l: "4. Delivery Date", v: sr.deliveryDate || "⚠ Not specified",
                                              c: sr.deliveryDate ? "var(--text)" : "var(--red)" },
                   ].map((f, i) => (
                     <div key={i} style={{ background: "var(--surface2)", borderRadius: 8, padding: "10px 12px" }}>
@@ -1415,39 +1414,39 @@ export default function LiveRFQDashboard() {
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 12 }}>
                   <div style={{ background: "var(--surface2)", borderRadius: 8, padding: "10px 12px" }}>
-                    <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4, fontWeight: 600 }}>5. מוכן לתחליפי?</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: sr.acceptsAlternatives === "כן" ? "var(--green)" : sr.acceptsAlternatives === "לא" ? "var(--red)" : "var(--text3)" }}>
-                      {sr.acceptsAlternatives === "כן" ? "✓ כן" : sr.acceptsAlternatives === "לא" ? "✗ לא" : "— לא צוין"}
+                    <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4, fontWeight: 600 }}>5. Accepts Alternatives?</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: sr.acceptsAlternatives === "Yes" ? "var(--green)" : sr.acceptsAlternatives === "No" ? "var(--red)" : "var(--text3)" }}>
+                      {sr.acceptsAlternatives === "Yes" ? "✓ Yes" : sr.acceptsAlternatives === "No" ? "✗ No" : "— Not specified"}
                     </div>
                   </div>
                   <div style={{ background: "var(--surface2)", borderRadius: 8, padding: "10px 12px" }}>
-                    <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4, fontWeight: 600 }}>6. מחיר מטרה</div>
+                    <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4, fontWeight: 600 }}>6. Target Price</div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: sr.targetPrice != null ? "var(--green)" : "var(--text3)", direction: "ltr", textAlign: "left" }}>
-                      {sr.targetPrice != null ? `$${sr.targetPrice}` : "לא צוין"}
+                      {sr.targetPrice != null ? `$${sr.targetPrice}` : "—"}
                     </div>
                   </div>
                   <div style={{ background: "var(--surface2)", borderRadius: 8, padding: "10px 12px" }}>
-                    <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4, fontWeight: 600 }}>עדיפות</div>
+                    <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4, fontWeight: 600 }}>Priority</div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: sr.priority === "high" ? "var(--red)" : sr.priority === "medium" ? "var(--amber)" : "var(--green)" }}>
-                      {sr.priority === "high" ? "🔴 גבוה" : sr.priority === "medium" ? "🟡 בינוני" : "🟢 נמוך"}
+                      {sr.priority === "high" ? "🔴 High" : sr.priority === "medium" ? "🟡 Medium" : "🟢 Low"}
                     </div>
                   </div>
                 </div>
 
-                {/* ── 7. דרישות מיוחדות ── */}
+                {/* ── 7. Special Requirements ── */}
                 {sr.specialRequirements && (
                   <div style={{
                     background: "#FBBF2408", borderRadius: 8, padding: "12px 16px",
                     fontSize: 12, color: "var(--amber)", borderRight: "3px solid var(--amber)", marginBottom: 12,
                   }}>
-                    <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text3)", display: "block", marginBottom: 4 }}>7. דרישות מיוחדות</span>
+                    <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text3)", display: "block", marginBottom: 4 }}>7. Special Requirements</span>
                     {sr.specialRequirements}
                   </div>
                 )}
 
                 {sr.summary && (
                   <div style={{ fontSize: 11, color: "var(--text3)", fontStyle: "italic", paddingBottom: 12 }}>
-                    סיכום AI: {sr.summary}
+                    AI Summary: {sr.summary}
                   </div>
                 )}
 
@@ -1455,13 +1454,13 @@ export default function LiveRFQDashboard() {
                 {responses.length > 0 && (
                   <div style={{ marginBottom: 14 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text2)", marginBottom: 8 }}>
-                      📊 תגובות ספקים ({responses.length}) · הטוב ביותר: <span style={{ color: scoreColor(bestScore) }}>{bestScore}/100</span>
+                      📊 Supplier Responses ({responses.length}) · Best: <span style={{ color: scoreColor(bestScore) }}>{bestScore}/100</span>
                     </div>
                     <div style={{ overflowX: "auto" }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10, direction: "ltr" }}>
                         <thead>
                           <tr style={{ background: "var(--surface2)", color: "var(--text3)", fontSize: 9, textTransform: "uppercase" }}>
-                            {["ספק","מחיר יחידה","המל״ז (ימים)","זמינות","MOQ","ציון","הערות"].map(h => (
+                            {["Supplier","Unit Price","Lead Time (d)","Available Qty","MOQ","Score","Notes"].map(h => (
                               <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, whiteSpace: "nowrap" }}>{h}</th>
                             ))}
                           </tr>
@@ -1515,7 +1514,7 @@ export default function LiveRFQDashboard() {
                 {(sr.statusHistory || []).length > 0 && (
                   <div style={{ marginBottom: 14 }}>
                     <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text3)", marginBottom: 6, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                      היסטוריית שלבים
+                      Status History
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                       {sr.statusHistory.map((h, hi) => (
@@ -1546,7 +1545,7 @@ export default function LiveRFQDashboard() {
                         background: "var(--accent)", color: "#000",
                         border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
                       }}
-                    >קדם שלב ▸</button>
+                    >Advance ▸</button>
                   )}
                   {sr.status !== 'new' && (
                     <button
@@ -1556,13 +1555,13 @@ export default function LiveRFQDashboard() {
                         background: "var(--surface2)", color: "var(--text2)",
                         border: "1px solid var(--border)", cursor: "pointer", fontSize: 11,
                       }}
-                    >◂ חזרה</button>
+                    >◂ Back</button>
                   )}
                   {/* Send to suppliers */}
                   <button
                     onClick={() => sendToSuppliers(sr)}
                     disabled={sendingSuppliers || !mailToken || !supplierList.length}
-                    title={!mailToken ? "התחבר לתיבת דואר תחילה" : !supplierList.length ? "הוסף ספקים בהגדרות" : sr.humanLoop ? "הסר דגל בדיקה ידנית לפני שליחה" : "שלח לכל הספקים ברשימה"}
+                    title={!mailToken ? "Connect your mailbox first" : !supplierList.length ? "Add suppliers in Settings" : sr.humanLoop ? "Remove the review flag before sending" : "Send to all suppliers in the list"}
                     style={{
                       padding: "9px 18px", borderRadius: 8, fontSize: 11, fontWeight: 700,
                       display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
@@ -1574,12 +1573,12 @@ export default function LiveRFQDashboard() {
                     }}
                   >
                     <SendIcon size={12} />
-                    {sendingSuppliers ? "שולח..." : `שלח לספקים (${supplierList.length})`}
+                    {sendingSuppliers ? "Sending..." : `Send to Suppliers (${supplierList.length})`}
                   </button>
                   {/* Human-loop toggle */}
                   <button
                     onClick={() => toggleHumanLoop(sr.id)}
-                    title={sr.humanLoop ? "הסר דגל — אפשר שליחה אוטומטית" : "סמן לבדיקה ידנית לפני שליחה"}
+                    title={sr.humanLoop ? "Remove flag — allow automatic sending" : "Flag for manual review before sending"}
                     style={{
                       padding: "9px 14px", borderRadius: 8, fontSize: 11,
                       cursor: "pointer",
@@ -1587,20 +1586,20 @@ export default function LiveRFQDashboard() {
                       color: sr.humanLoop ? "var(--accent)" : "var(--text3)",
                       border: `1px solid ${sr.humanLoop ? "#38BDF840" : "var(--border)"}`,
                     }}
-                  >{sr.humanLoop ? "🔍 הסר בדיקה" : "🔍 סמן לבדיקה"}</button>
+                  >{sr.humanLoop ? "🔍 Remove Review" : "🔍 Flag for Review"}</button>
                   {/* Copy */}
                   <button
                     onClick={() => {
-                      const text = `שם לקוח: ${sr.customerName}\nמק״ט: ${sr.partNumber}\nכמות: ${sr.quantity}\nת. אספקה: ${sr.deliveryDate || "—"}\nתחליפי: ${sr.acceptsAlternatives}\nמחיר מטרה: ${sr.targetPrice != null ? "$" + sr.targetPrice : "—"}\nדרישות: ${sr.specialRequirements || "—"}\nOBS: ${sr.isObsolete ? "כן" : "לא"}`;
+                      const text = `Customer: ${sr.customerName}\nPart Number: ${sr.partNumber}\nQuantity: ${sr.quantity}\nDelivery Date: ${sr.deliveryDate || "—"}\nAccepts Alternatives: ${sr.acceptsAlternatives}\nTarget Price: ${sr.targetPrice != null ? "$" + sr.targetPrice : "—"}\nSpecial Requirements: ${sr.specialRequirements || "—"}\nObsolete: ${sr.isObsolete ? "Yes" : "No"}`;
                       navigator.clipboard?.writeText(text);
-                      addLog("📋 נתוני RFQ הועתקו ללוח", "success");
+                      addLog("📋 RFQ data copied to clipboard", "success");
                     }}
                     style={{
                       padding: "9px 16px", borderRadius: 8,
                       background: "var(--surface2)", color: "var(--text2)",
                       border: "1px solid var(--border)", cursor: "pointer", fontSize: 11,
                     }}
-                  >📋 העתק</button>
+                  >📋 Copy</button>
                 </div>
               </div>
               );
@@ -1612,10 +1611,10 @@ export default function LiveRFQDashboard() {
         {activeTab === "inbox" && (
           <div style={{ animation: "slideIn 0.3s ease" }}>
             <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, color: "var(--accent)" }}>
-              📬 תיבת דואר אמיתית
+              📬 Live Inbox
             </h2>
             <p style={{ fontSize: 11, color: "var(--text3)", marginBottom: 20 }}>
-              התחבר ל-Gmail או Outlook, סנן, ובחר מייל להזרמה דרך מנוע ה-LLM.
+              Connect to Gmail or Outlook, filter messages, and process emails through the LLM engine.
             </p>
 
             {/* Connection bar */}
@@ -1654,12 +1653,12 @@ export default function LiveRFQDashboard() {
                       fontSize: 11, fontWeight: 700,
                     }}
                   >
-                    {mailLoading ? "מתחבר..." : `🔑 התחבר ל-${mailProvider === 'gmail' ? 'Gmail' : 'Outlook'}`}
+                    {mailLoading ? "Connecting..." : `🔑 Connect to ${mailProvider === 'gmail' ? 'Gmail' : 'Outlook'}`}
                   </button>
                   {mailProvider === 'outlook' && (
                     <button
                       onClick={resetOutlookCache}
-                      title="נקה את מטמון MSAL — נסה אם ה-popup לא נפתח"
+                      title="Clear MSAL cache — try this if the popup does not open"
                       style={{
                         padding: "8px 12px", borderRadius: 8,
                         background: "var(--surface2)", color: "var(--text2)",
@@ -1667,7 +1666,7 @@ export default function LiveRFQDashboard() {
                         fontSize: 10, fontWeight: 600,
                       }}
                     >
-                      🧹 נקה MSAL
+                      🧹 Clear MSAL
                     </button>
                   )}
                 </>
@@ -1681,7 +1680,7 @@ export default function LiveRFQDashboard() {
                     fontSize: 11, fontWeight: 600,
                   }}
                 >
-                  🔌 התנתק
+                  🔌 Disconnect
                 </button>
               )}
 
@@ -1708,7 +1707,7 @@ export default function LiveRFQDashboard() {
                   fontSize: 11, fontWeight: 700,
                 }}
               >
-                {mailLoading ? "..." : "🔄 טען רשימה"}
+                {mailLoading ? "..." : "🔄 Load Messages"}
               </button>
             </div>
 
@@ -1719,7 +1718,7 @@ export default function LiveRFQDashboard() {
             }}>
               {mailMessages.length === 0 ? (
                 <div style={{ padding: 40, textAlign: "center", color: "var(--text3)", fontSize: 12 }}>
-                  {mailToken ? "אין הודעות — נסה שאילתה אחרת" : "לא מחובר לתיבת דואר"}
+                  {mailToken ? "No messages — try a different search query" : "Not connected to a mailbox"}
                 </div>
               ) : (
                 mailMessages.map((m, i) => (
@@ -1733,7 +1732,7 @@ export default function LiveRFQDashboard() {
                         {m.subject}
                       </div>
                       <div style={{ fontSize: 10, color: "var(--text2)", marginBottom: 4, direction: "ltr", textAlign: "right" }}>
-                        {m.from} · {m.date && new Date(m.date).toLocaleString("he-IL")}
+                        {m.from} · {m.date && new Date(m.date).toLocaleString("en-GB")}
                       </div>
                       <div style={{ fontSize: 10, color: "var(--text3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {m.snippet}
@@ -1742,7 +1741,7 @@ export default function LiveRFQDashboard() {
                     <button
                       onClick={() => processMailMessage(m)}
                       disabled={isProcessing || !providerReady}
-                      title={!providerReady ? "הגדר ספק LLM תחילה" : "עבד דרך ה-LLM"}
+                      title={!providerReady ? "Configure an LLM provider first" : "Process via LLM"}
                       style={{
                         padding: "8px 14px", borderRadius: 8,
                         background: (!providerReady || isProcessing) ? "var(--surface3)" : "var(--amber)",
@@ -1751,7 +1750,7 @@ export default function LiveRFQDashboard() {
                         fontSize: 11, fontWeight: 700, whiteSpace: "nowrap",
                       }}
                     >
-                      ▶ עבד
+                      ▶ Process
                     </button>
                   </div>
                 ))
@@ -1764,7 +1763,7 @@ export default function LiveRFQDashboard() {
         {activeTab === "config" && (
           <div style={{ animation: "slideIn 0.3s ease", maxWidth: 700 }}>
             <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 24, color: "var(--accent)" }}>
-              ⚙️ הגדרות מערכת
+              ⚙️ System Settings
             </h2>
 
             {/* LLM Provider */}
@@ -1773,7 +1772,7 @@ export default function LiveRFQDashboard() {
               borderRadius: 12, padding: 20, marginBottom: 16,
             }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
-                🤖 ספק מנוע LLM
+                🤖 LLM Provider
               </div>
               <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
                 {PROVIDERS.map(p => (
@@ -1795,7 +1794,7 @@ export default function LiveRFQDashboard() {
 
               {provider === 'anthropic' && (
                 <div style={{ display: "grid", gap: 10 }}>
-                  <div style={{ fontSize: 10, color: "var(--text2)" }}>Anthropic API Key (נשמר ב-localStorage בדפדפן בלבד)</div>
+                  <div style={{ fontSize: 10, color: "var(--text2)" }}>Anthropic API Key (stored in browser localStorage only)</div>
                   <input
                     type="password"
                     value={anthropicApiKey}
@@ -1825,7 +1824,7 @@ export default function LiveRFQDashboard() {
 
               {provider === 'openai' && (
                 <div style={{ display: "grid", gap: 10 }}>
-                  <div style={{ fontSize: 10, color: "var(--text2)" }}>Base URL (תואם OpenAI — OpenAI / Groq / Together / LM Studio וכו׳)</div>
+                  <div style={{ fontSize: 10, color: "var(--text2)" }}>Base URL (OpenAI-compatible — OpenAI / Groq / Together / LM Studio etc.)</div>
                   <input
                     value={openaiBaseUrl}
                     onChange={e => setOpenaiBaseUrl(e.target.value)}
@@ -1867,7 +1866,7 @@ export default function LiveRFQDashboard() {
 
               {provider === 'ollama' && (
                 <div style={{ display: "grid", gap: 10 }}>
-                  <div style={{ fontSize: 10, color: "var(--text2)" }}>Ollama Base URL (מקומי ברירת מחדל)</div>
+                  <div style={{ fontSize: 10, color: "var(--text2)" }}>Ollama Base URL (local default)</div>
                   <input
                     value={ollamaBaseUrl}
                     onChange={e => setOllamaBaseUrl(e.target.value)}
@@ -1879,7 +1878,7 @@ export default function LiveRFQDashboard() {
                       direction: "ltr", fontFamily: "monospace",
                     }}
                   />
-                  <div style={{ fontSize: 10, color: "var(--text2)" }}>Model (ודא ש־ollama pull רץ למודל זה)</div>
+                  <div style={{ fontSize: 10, color: "var(--text2)" }}>Model (make sure <code>ollama pull</code> has been run for this model)</div>
                   <input
                     value={ollamaModel}
                     onChange={e => setOllamaModel(e.target.value)}
@@ -1892,13 +1891,13 @@ export default function LiveRFQDashboard() {
                     }}
                   />
                   <div style={{ fontSize: 10, color: "var(--amber)", lineHeight: 1.5 }}>
-                    ⚠️ אם הדפדפן חוסם CORS, הפעל Ollama עם: <code style={{fontFamily:"monospace"}}>$env:OLLAMA_ORIGINS="*"; ollama serve</code>
+                    ⚠️ If the browser blocks CORS, start Ollama with: <code style={{fontFamily:"monospace"}}>OLLAMA_ORIGINS="*" ollama serve</code>
                   </div>
                 </div>
               )}
 
               <div style={{ fontSize: 10, color: providerReady ? "var(--green)" : "var(--text3)", marginTop: 12 }}>
-                {providerReady ? `✓ ספק ${provider} מוכן` : "⚠ ההגדרה עדיין לא שלמה"}
+                {providerReady ? `✓ ${provider} provider ready` : "⚠ Configuration incomplete"}
               </div>
             </div>
 
@@ -1908,10 +1907,10 @@ export default function LiveRFQDashboard() {
               borderRadius: 12, padding: 20, marginBottom: 16,
             }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
-                📬 תיבות דואר אמיתיות (OAuth)
+                📬 Live Mailboxes (OAuth)
               </div>
               <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 14, lineHeight: 1.7 }}>
-                הוסף Client IDs כדי להתחבר לתיבות ה-Gmail וה-Outlook שלך. כל ה-OAuth מתבצע בדפדפן — לא נשמרים tokens בשרת.
+                Add Client IDs to connect to your Gmail and Outlook mailboxes. All OAuth flows run in the browser — no tokens are sent to any server.
               </div>
 
               <div style={{ display: "grid", gap: 10 }}>
@@ -1928,9 +1927,9 @@ export default function LiveRFQDashboard() {
                   }}
                 />
                 <div style={{ fontSize: 9, color: "var(--text3)", lineHeight: 1.6 }}>
-                  צור ב-<a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>Google Cloud Console</a> → OAuth 2.0 Client ID (Web).
-                  הוסף ל-Authorized JavaScript origins: <code style={{ direction: "ltr", fontFamily: "monospace" }}>{typeof window !== "undefined" ? window.location.origin : "http://localhost:5173"}</code>.
-                  הפעל Gmail API בפרויקט.
+                  Create in <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>Google Cloud Console</a> → OAuth 2.0 Client ID (Web application).
+                  Add to Authorized JavaScript origins: <code style={{ direction: "ltr", fontFamily: "monospace" }}>{typeof window !== "undefined" ? window.location.origin : "http://localhost:5173"}</code>.
+                  Enable the Gmail API for the project.
                 </div>
 
                 <div style={{ fontSize: 10, color: "var(--text2)", marginTop: 8 }}>Microsoft (Azure AD) Client ID</div>
@@ -1945,11 +1944,11 @@ export default function LiveRFQDashboard() {
                     direction: "ltr", fontFamily: "monospace",
                   }}
                 />
-                <div style={{ fontSize: 10, color: "var(--text2)", marginTop: 4 }}>Microsoft Tenant ID (או domain — דרוש אם האפליקציה היא single-tenant)</div>
+                <div style={{ fontSize: 10, color: "var(--text2)", marginTop: 4 }}>Microsoft Tenant ID (or domain — required if the app is single-tenant)</div>
                 <input
                   value={msTenantId}
                   onChange={e => setMsTenantId(e.target.value)}
-                  placeholder="contoso.onmicrosoft.com או GUID — השאר ריק ל-multi-tenant"
+                  placeholder="contoso.onmicrosoft.com or GUID — leave blank for multi-tenant"
                   style={{
                     padding: "10px 14px", borderRadius: 8,
                     background: "var(--surface2)", border: "1px solid var(--border)",
@@ -1958,10 +1957,10 @@ export default function LiveRFQDashboard() {
                   }}
                 />
                 <div style={{ fontSize: 9, color: "var(--text3)", lineHeight: 1.6 }}>
-                  צור ב-<a href="https://entra.microsoft.com/" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>Microsoft Entra</a> → App registrations → Single-page application.
+                  Create in <a href="https://entra.microsoft.com/" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>Microsoft Entra</a> → App registrations → Single-page application.
                   Redirect URI: <code style={{ direction: "ltr", fontFamily: "monospace" }}>{typeof window !== "undefined" ? window.location.origin : "http://localhost:5173"}</code>.
-                  הרשאות Microsoft Graph: <code>Mail.Read</code>, <code>User.Read</code> (delegated).
-                  את ה-Tenant ID תמצא ב-Overview של ה-app registration (Directory (tenant) ID).
+                  Microsoft Graph permissions: <code>Mail.Read</code>, <code>User.Read</code> (delegated).
+                  Find the Tenant ID in the app registration Overview (Directory (tenant) ID).
                 </div>
               </div>
             </div>
@@ -1972,7 +1971,7 @@ export default function LiveRFQDashboard() {
               borderRadius: 12, padding: 16, marginBottom: 16,
               fontSize: 11, color: "var(--text2)", lineHeight: 1.7,
             }}>
-              💡 לחיבור אמיתי ל-Gmail / Outlook, עבור ל-<button onClick={() => setActiveTab('inbox')} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", padding: 0, fontFamily: "inherit", textDecoration: "underline" }}>טאב Inbox</button>. מצב החיבור הנוכחי: {mailToken ? <span style={{ color: "var(--green)" }}>✓ מחובר ({mailProvider})</span> : <span style={{ color: "var(--red)" }}>לא מחובר</span>}
+              💡 To connect to Gmail / Outlook, go to the <button onClick={() => setActiveTab('inbox')} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", padding: 0, fontFamily: "inherit", textDecoration: "underline" }}>Inbox tab</button>. Current connection status: {mailToken ? <span style={{ color: "var(--green)" }}>✓ Connected ({mailProvider})</span> : <span style={{ color: "var(--red)" }}>Not connected</span>}
             </div>
 
             {/* Search Query */}
@@ -1981,10 +1980,10 @@ export default function LiveRFQDashboard() {
               borderRadius: 12, padding: 20, marginBottom: 16,
             }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
-                🔍 שאילתת חיפוש Gmail
+                🔍 Gmail Search Query
               </div>
               <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 12 }}>
-                Gmail search query — שנה לפי הצורך
+                Gmail search query — modify as needed
               </div>
               <input
                 value={searchQuery}
@@ -2004,7 +2003,7 @@ export default function LiveRFQDashboard() {
               borderRadius: 12, padding: 20, marginBottom: 16,
             }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
-                ⏱️ תדירות בדיקה
+                ⏱️ Poll Interval
               </div>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 {[30, 60, 120, 300].map(sec => (
@@ -2032,7 +2031,7 @@ export default function LiveRFQDashboard() {
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                 <UsersIcon size={15} color="var(--pink)" />
-                <div style={{ fontSize: 13, fontWeight: 600 }}>רשימת ספקים</div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>Supplier List</div>
                 {supplierList.length > 0 && (
                   <span style={{
                     fontSize: 10, fontWeight: 700, padding: "1px 8px", borderRadius: 10,
@@ -2041,7 +2040,7 @@ export default function LiveRFQDashboard() {
                 )}
               </div>
               <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 14, lineHeight: 1.6 }}>
-                כתובות הדוא״ל שאליהן ישלחו בקשות הצעת המחיר. השליחה מתבצעת דרך תיבת הדואר המחוברת.
+                Email addresses that will receive RFQ outreach emails. Sending uses your connected mailbox.
               </div>
 
               {/* Existing suppliers */}
@@ -2050,7 +2049,7 @@ export default function LiveRFQDashboard() {
                   padding: "16px 0", textAlign: "center", color: "var(--text3)", fontSize: 11,
                   borderBottom: "1px solid var(--border)", marginBottom: 14,
                 }}>
-                  אין ספקים ברשימה עדיין — הוסף למטה
+                  No suppliers yet — add one below
                 </div>
               ) : (
                 <div style={{ marginBottom: 14, display: "flex", flexDirection: "column", gap: 6 }}>
@@ -2076,7 +2075,7 @@ export default function LiveRFQDashboard() {
                       </div>
                       <button
                         onClick={() => removeSupplier(idx)}
-                        title="הסר ספק"
+                        title="Remove supplier"
                         style={{
                           background: "none", border: "none", cursor: "pointer",
                           padding: 4, borderRadius: 4, color: "var(--text3)",
@@ -2091,12 +2090,12 @@ export default function LiveRFQDashboard() {
               {/* Add new supplier */}
               <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4 }}>שם ספק</div>
+                  <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4 }}>Supplier Name</div>
                   <input
                     value={newSupplierName}
                     onChange={e => setNewSupplierName(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && addSupplier()}
-                    placeholder="לדוגמה: Arrow Electronics"
+                    placeholder="e.g. Arrow Electronics"
                     style={{
                       width: "100%", padding: "9px 12px", borderRadius: 8,
                       background: "var(--surface2)", border: "1px solid var(--border)",
@@ -2105,7 +2104,7 @@ export default function LiveRFQDashboard() {
                   />
                 </div>
                 <div style={{ flex: 1.2 }}>
-                  <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4 }}>כתובת דוא״ל</div>
+                  <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4 }}>Email Address</div>
                   <input
                     value={newSupplierEmail}
                     onChange={e => setNewSupplierEmail(e.target.value)}
@@ -2132,7 +2131,7 @@ export default function LiveRFQDashboard() {
                     border: "none", cursor: "pointer", whiteSpace: "nowrap",
                     transition: "all 0.15s",
                   }}
-                >+ הוסף</button>
+                >+ Add</button>
               </div>
             </div>
 
@@ -2142,21 +2141,21 @@ export default function LiveRFQDashboard() {
               borderRadius: 12, padding: 20,
             }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>
-                🚀 הפעלת מערכת
+                🚀 System Control
               </div>
               <button
                 onClick={() => {
                   if (!mailToken) {
-                    addLog("⚠️ התחבר לתיבת דואר (Inbox) לפני הפעלה", "warning");
+                    addLog("⚠️ Connect to a mailbox (Inbox tab) before starting", "warning");
                     setActiveTab('inbox');
                     return;
                   }
                   if (!providerReady) {
-                    addLog("⚠️ הגדר ספק LLM לפני הפעלה", "warning");
+                    addLog("⚠️ Configure an LLM provider before starting", "warning");
                     return;
                   }
                   setIsRunning(!isRunning);
-                  addLog(isRunning ? "⏹️ מערכת הופסקה" : `▶️ מערכת הופעלה — בודק כל ${pollInterval} שניות`, "info");
+                  addLog(isRunning ? "⏹️ System stopped" : `▶️ System started — polling every ${pollInterval} seconds`, "info");
                 }}
                 style={{
                   padding: "14px 32px", borderRadius: 12,
@@ -2169,7 +2168,7 @@ export default function LiveRFQDashboard() {
                   boxShadow: isRunning ? "0 4px 20px #F8717140" : "0 4px 20px #34D39940",
                 }}
               >
-                {isRunning ? <><PauseIcon size={16} color="#fff" /> עצור מערכת</> : <><PlayIcon size={16} color="#fff" /> הפעל מערכת</>}
+                {isRunning ? <><PauseIcon size={16} color="#fff" /> Stop System</> : <><PlayIcon size={16} color="#fff" /> Start System</>}
               </button>
             </div>
           </div>
@@ -2179,10 +2178,10 @@ export default function LiveRFQDashboard() {
         {activeTab === "test" && (
           <div style={{ animation: "slideIn 0.3s ease", maxWidth: 800 }}>
             <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, color: "var(--amber)" }}>
-              ⚡ בדיקה ידנית
+              ⚡ Manual Test
             </h2>
             <p style={{ fontSize: 11, color: "var(--text3)", marginBottom: 20 }}>
-              הדבק תוכן של מייל RFQ כדי לבדוק את מנוע העיבוד — Claude AI יחלץ את הנתונים אוטומטית.
+              Paste the body of an RFQ email to test the processing engine — Claude AI will extract the data automatically.
             </p>
 
             {/* Example email picker */}
@@ -2192,7 +2191,7 @@ export default function LiveRFQDashboard() {
               display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap",
             }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text2)" }}>
-                📁 טען מייל לדוגמה:
+                📁 Load example email:
               </div>
               <select
                 value={selectedExample}
@@ -2203,7 +2202,7 @@ export default function LiveRFQDashboard() {
                   color: "var(--text)", fontSize: 11, outline: "none",
                 }}
               >
-                <option value="">— בחר מייל לטעינה —</option>
+                <option value="">— Select an email to load —</option>
                 {EXAMPLE_EMAILS.map(name => (
                   <option key={name} value={name}>{name}</option>
                 ))}
@@ -2215,7 +2214,7 @@ export default function LiveRFQDashboard() {
                   setTimeout(() => handleTestProcess(), 200);
                 }}
                 disabled={!selectedExample || isProcessing || !providerReady}
-                title={!providerReady ? "הגדר את ספק ה-LLM תחילה בהגדרות" : `טען והרץ דרך ${provider}`}
+                title={!providerReady ? "Configure an LLM provider first in Settings" : `Load and run via ${provider}`}
                 style={{
                   padding: "8px 16px", borderRadius: 8,
                   background: (!selectedExample || !providerReady) ? "var(--surface3)" : "var(--amber)",
@@ -2224,7 +2223,7 @@ export default function LiveRFQDashboard() {
                   fontSize: 11, fontWeight: 700,
                 }}
               >
-                ▶ טען והרץ
+                ▶ Load &amp; Run
               </button>
             </div>
 
@@ -2235,9 +2234,9 @@ export default function LiveRFQDashboard() {
               <textarea
                 value={testEmail}
                 onChange={e => setTestEmail(e.target.value)}
-                placeholder={`הדבק כאן תוכן מייל RFQ לבדיקה...
+                placeholder={`Paste an RFQ email here for testing...
 
-לדוגמה:
+Example:
 היי לקוח
 דרישה לרכש
 כמות – 10000 יח
@@ -2255,7 +2254,7 @@ export default function LiveRFQDashboard() {
               />
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14 }}>
                 <span style={{ fontSize: 10, color: "var(--text3)" }}>
-                  {testEmail.length > 0 ? `${testEmail.length} תווים` : ""}
+                  {testEmail.length > 0 ? `${testEmail.length} chars` : ""}
                 </span>
                 <button
                   onClick={handleTestProcess}
@@ -2273,12 +2272,12 @@ export default function LiveRFQDashboard() {
                   {isProcessing ? (
                     <>
                       <RefreshIcon size={14} style={{ animation: "spin 1s linear infinite" }} />
-                      מעבד...
+                      Processing...
                     </>
                   ) : (
                     <>
                       <ZapIcon size={14} color="#000" />
-                      עבד עם Claude AI
+                      Process with Claude AI
                     </>
                   )}
                 </button>
@@ -2288,7 +2287,7 @@ export default function LiveRFQDashboard() {
             {/* Quick test templates */}
             <div style={{ marginTop: 20 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text2)", marginBottom: 10 }}>
-                תבניות בדיקה מהירות:
+                Quick test templates:
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {[
@@ -2324,7 +2323,7 @@ export default function LiveRFQDashboard() {
                   borderRadius: 6, padding: "2px 10px", fontSize: 10, fontWeight: 800,
                 }}>B</span>
                 <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--pink)", margin: 0 }}>
-                  תצוגה מקדימה — שליחה לספקים
+                  Outreach Preview — Send to Suppliers
                 </h3>
               </div>
 
@@ -2334,7 +2333,7 @@ export default function LiveRFQDashboard() {
               }}>
                 {/* RFQ selector */}
                 <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
-                  <label style={{ fontSize: 11, color: "var(--text2)", fontWeight: 600, minWidth: 90 }}>בחר RFQ:</label>
+                  <label style={{ fontSize: 11, color: "var(--text2)", fontWeight: 600, minWidth: 90 }}>Select RFQ:</label>
                   <select
                     value={testOutreachRfqId}
                     onChange={e => setTestOutreachRfqId(e.target.value)}
@@ -2344,7 +2343,7 @@ export default function LiveRFQDashboard() {
                       color: "var(--text)", fontSize: 11, outline: "none",
                     }}
                   >
-                    <option value="">— בחר RFQ לתצוגה —</option>
+                    <option value="">— Select an RFQ to preview —</option>
                     {rfqs.filter(r => r.partNumber).map(r => (
                       <option key={r.id} value={r.id}>
                         {r.partNumber} — {r.customerName}{r.isObsolete ? " [OBS]" : ""}
@@ -2359,7 +2358,7 @@ export default function LiveRFQDashboard() {
                     return (
                       <button
                         onClick={() => toggleHumanLoop(testOutreachRfqId)}
-                        title={selRfq.humanLoop ? "לחץ להסרת דגל — תאפשר שליחה אוטומטית" : "לחץ לסימון לבדיקה ידנית לפני שליחה"}
+                        title={selRfq.humanLoop ? "Click to remove flag — enables automatic sending" : "Click to flag for manual review before sending"}
                         style={{
                           padding: "7px 14px", borderRadius: 8,
                           background: selRfq.humanLoop ? "#FBBF2420" : "var(--surface2)",
@@ -2369,7 +2368,7 @@ export default function LiveRFQDashboard() {
                           display: "flex", alignItems: "center", gap: 6,
                         }}
                       >
-                        🔍 {selRfq.humanLoop ? "בדיקה ידנית ON" : "בדיקה ידנית OFF"}
+                        🔍 {selRfq.humanLoop ? "Manual Review ON" : "Manual Review OFF"}
                       </button>
                     );
                   })()}
@@ -2379,10 +2378,10 @@ export default function LiveRFQDashboard() {
                     const selRfq = rfqs.find(r => r.id === testOutreachRfqId);
                     if (!selRfq) return null;
                     const canSend = mailToken && supplierList.length > 0 && !selRfq.humanLoop && !sendingSuppliers;
-                    const tooltip = !mailToken ? "התחבר לתיבת דואר תחילה"
-                      : !supplierList.length ? "הוסף ספקים בהגדרות"
-                      : selRfq.humanLoop ? "הסר דגל בדיקה ידנית לפני שליחה"
-                      : `שלח ל-${supplierList.length} ספקים`;
+                    const tooltip = !mailToken ? "Connect your mailbox first"
+                      : !supplierList.length ? "Add suppliers in Settings"
+                      : selRfq.humanLoop ? "Remove the review flag before sending"
+                      : `Send to ${supplierList.length} supplier(s)`;
                     return (
                       <button
                         onClick={() => sendToSuppliers(selRfq)}
@@ -2398,7 +2397,7 @@ export default function LiveRFQDashboard() {
                           opacity: canSend ? 1 : 0.5,
                         }}
                       >
-                        📤 {sendingSuppliers ? "שולח..." : `שלח ל-${supplierList.length} ספקים`}
+                        📤 {sendingSuppliers ? "Sending..." : `Send to ${supplierList.length} Supplier(s)`}
                       </button>
                     );
                   })()}
@@ -2415,11 +2414,11 @@ export default function LiveRFQDashboard() {
                       padding: "6px 14px", fontSize: 10, color: "var(--text3)",
                       display: "flex", gap: 12,
                     }}>
-                      <span>נושא: <b style={{ color: "var(--text)" }}>RFQ — {rfqs.find(r => r.id === testOutreachRfqId)?.partNumber} | {rfqs.find(r => r.id === testOutreachRfqId)?.customerName}</b></span>
-                      <span style={{ marginRight: "auto" }}>
+                      <span>Subject: <b style={{ color: "var(--text)" }}>RFQ — {rfqs.find(r => r.id === testOutreachRfqId)?.partNumber} | {rfqs.find(r => r.id === testOutreachRfqId)?.customerName}</b></span>
+                      <span style={{ marginLeft: "auto" }}>
                         {supplierList.length > 0
-                          ? `יישלח ל: ${supplierList.map(s => s.email).join(", ")}`
-                          : "⚠ אין ספקים ברשימה"}
+                          ? `Sending to: ${supplierList.map(s => s.email).join(", ")}`
+                          : "⚠ No suppliers in list"}
                       </span>
                     </div>
                     <div
@@ -2429,7 +2428,7 @@ export default function LiveRFQDashboard() {
                   </div>
                 ) : (
                   <div style={{ padding: "24px 0", textAlign: "center", color: "var(--text3)", fontSize: 11 }}>
-                    בחר RFQ מהרשימה למעלה לתצוגה מקדימה של המייל
+                    Select an RFQ above to preview the outreach email
                   </div>
                 )}
               </div>
@@ -2446,7 +2445,7 @@ export default function LiveRFQDashboard() {
                   borderRadius: 6, padding: "2px 10px", fontSize: 10, fontWeight: 800,
                 }}>C</span>
                 <h3 style={{ fontSize: 14, fontWeight: 700, color: "#34D399", margin: 0 }}>
-                  עיבוד תגובת ספק — חישוב ניקוד
+                  Supplier Response Parse &amp; Score
                 </h3>
               </div>
 
@@ -2457,7 +2456,7 @@ export default function LiveRFQDashboard() {
                 {/* Supplier .eml file picker + link to RFQ */}
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1, minWidth: 220 }}>
-                    <label style={{ fontSize: 10, color: "var(--text3)", fontWeight: 600 }}>טען .eml לדוגמה:</label>
+                    <label style={{ fontSize: 10, color: "var(--text3)", fontWeight: 600 }}>Load example .eml:</label>
                     <select
                       value={testSupplierFile}
                       onChange={e => { setTestSupplierFile(e.target.value); loadSupplierMail(e.target.value); }}
@@ -2467,7 +2466,7 @@ export default function LiveRFQDashboard() {
                         color: "var(--text)", fontSize: 11, outline: "none",
                       }}
                     >
-                      <option value="">— בחר קובץ .eml —</option>
+                      <option value="">— Select .eml file —</option>
                       {SUPPLIER_MAIL_FILES.map(f => (
                         <option key={f} value={f}>{f}</option>
                       ))}
@@ -2475,7 +2474,7 @@ export default function LiveRFQDashboard() {
                   </div>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1, minWidth: 220 }}>
-                    <label style={{ fontSize: 10, color: "var(--text3)", fontWeight: 600 }}>קשר ל-RFQ (לחישוב ניקוד):</label>
+                    <label style={{ fontSize: 10, color: "var(--text3)", fontWeight: 600 }}>Link to RFQ (for scoring):</label>
                     <select
                       value={testSupplierLinkRfqId}
                       onChange={e => setTestSupplierLinkRfqId(e.target.value)}
@@ -2485,7 +2484,7 @@ export default function LiveRFQDashboard() {
                         color: "var(--text)", fontSize: 11, outline: "none",
                       }}
                     >
-                      <option value="">— ללא קישור —</option>
+                      <option value="">— No link —</option>
                       {rfqs.filter(r => r.partNumber).map(r => (
                         <option key={r.id} value={r.id}>
                           {r.partNumber} — {r.customerName}
@@ -2500,9 +2499,9 @@ export default function LiveRFQDashboard() {
                 <textarea
                   value={testSupplierText}
                   onChange={e => setTestSupplierText(e.target.value)}
-                  placeholder={`הדבק כאן תגובת מייל מספק לניתוח...
+                  placeholder={`Paste a supplier reply email here for analysis...
 
-לדוגמה:
+Example:
 Dear rfq,
 Thank you for your inquiry.
 We can offer the following:
@@ -2527,7 +2526,7 @@ ABC Electronics`}
                   <button
                     onClick={processSupplierResponse}
                     disabled={testSupplierProcessing || !testSupplierText.trim() || !providerReady}
-                    title={!providerReady ? "הגדר ספק LLM בהגדרות תחילה" : ""}
+                    title={!providerReady ? "Configure an LLM provider in Settings first" : ""}
                     style={{
                       padding: "10px 24px", borderRadius: 10,
                       background: (testSupplierProcessing || !testSupplierText.trim() || !providerReady)
@@ -2544,10 +2543,10 @@ ABC Electronics`}
                     {testSupplierProcessing ? (
                       <>
                         <RefreshIcon size={14} style={{ animation: "spin 1s linear infinite" }} />
-                        מעבד...
+                        Processing...
                       </>
                     ) : (
-                      <>📊 עבד תגובה</>
+                      <>📊 Process Response</>
                     )}
                   </button>
                 </div>
@@ -2581,13 +2580,13 @@ ABC Electronics`}
                       </div>
                       <div>
                         <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>
-                          {testSupplierResult.supplierName || "ספק לא זוהה"}
+                          {testSupplierResult.supplierName || "Supplier not identified"}
                         </div>
                         <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 2 }}>
                           {testSupplierResult.rfqId
-                            ? `קשור ל-${rfqs.find(r => r.id === testSupplierResult.rfqId)?.partNumber || testSupplierResult.rfqId}`
-                            : "לא קשור ל-RFQ"}
-                           · עובד: {testSupplierResult.receivedAt}
+                            ? `Linked to ${rfqs.find(r => r.id === testSupplierResult.rfqId)?.partNumber || testSupplierResult.rfqId}`
+                            : "Not linked to an RFQ"}
+                           · Processed: {testSupplierResult.receivedAt}
                         </div>
                       </div>
                     </div>
@@ -2596,27 +2595,27 @@ ABC Electronics`}
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
                       <tbody>
                         {[
-                          ["מק״ט",          testSupplierResult.partNumber],
-                          ["מחיר ליחידה",   testSupplierResult.quotedPrice != null
+                          ["Part #",         testSupplierResult.partNumber],
+                          ["Unit Price",     testSupplierResult.quotedPrice != null
                             ? `${testSupplierResult.quotedPrice} ${testSupplierResult.currency || "USD"}`
                             : null],
-                          ["זמן אספקה",     testSupplierResult.leadTimeDays != null
-                            ? (testSupplierResult.leadTimeDays === 0 ? "במלאי" : `${testSupplierResult.leadTimeDays} ימים`)
+                          ["Lead Time",      testSupplierResult.leadTimeDays != null
+                            ? (testSupplierResult.leadTimeDays === 0 ? "In Stock" : `${testSupplierResult.leadTimeDays} days`)
                             : null],
-                          ["כמות זמינה",    testSupplierResult.availableQty != null
+                          ["Available Qty",  testSupplierResult.availableQty != null
                             ? testSupplierResult.availableQty.toLocaleString()
                             : null],
                           ["MOQ",            testSupplierResult.moq != null
                             ? testSupplierResult.moq.toLocaleString()
                             : null],
-                          ["במלאי",          testSupplierResult.inStock != null
-                            ? (testSupplierResult.inStock ? "כן ✓" : "לא")
+                          ["In Stock",       testSupplierResult.inStock != null
+                            ? (testSupplierResult.inStock ? "Yes ✓" : "No")
                             : null],
-                          ["הערות",         testSupplierResult.notes],
+                          ["Notes",          testSupplierResult.notes],
                         ].map(([label, value]) => value != null ? (
                           <tr key={label} style={{ borderBottom: "1px solid var(--border)" }}>
                             <td style={{ padding: "6px 10px", color: "var(--text3)", fontWeight: 600, width: 120 }}>{label}</td>
-                            <td style={{ padding: "6px 10px", color: "var(--text)", fontFamily: label === "מק״ט" ? "monospace" : "inherit" }}>
+                            <td style={{ padding: "6px 10px", color: "var(--text)", fontFamily: label === "Part #" ? "monospace" : "inherit" }}>
                               {String(value)}
                             </td>
                           </tr>
@@ -2631,12 +2630,12 @@ ABC Electronics`}
                       fontSize: 10, color: "var(--text3)",
                       display: "flex", gap: 16, flexWrap: "wrap",
                     }}>
-                      <span>ניקוד פירוט:</span>
-                      <span style={{ color: "var(--accent)" }}>💰 מחיר (40)</span>
-                      <span style={{ color: "#F472B6" }}>⏱ זמן אספקה (40)</span>
-                      <span style={{ color: "#34D399" }}>📦 זמינות (20)</span>
-                      <span style={{ marginRight: "auto" }}>
-                        {testSupplierResult.score >= 70 ? "✅ הצעה טובה" : testSupplierResult.score >= 40 ? "⚠ הצעה בינונית" : "❌ הצעה חלשה"}
+                      <span>Score breakdown:</span>
+                      <span style={{ color: "var(--accent)" }}>💰 Price (40)</span>
+                      <span style={{ color: "#F472B6" }}>⏱ Lead Time (40)</span>
+                      <span style={{ color: "#34D399" }}>📦 Availability (20)</span>
+                      <span style={{ marginLeft: "auto" }}>
+                        {testSupplierResult.score >= 70 ? "✅ Good offer" : testSupplierResult.score >= 40 ? "⚠ Average offer" : "❌ Weak offer"}
                       </span>
                     </div>
                   </div>
@@ -2651,7 +2650,7 @@ ABC Electronics`}
           <div style={{ animation: "slideIn 0.3s ease" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
               <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--purple)" }}>
-                📋 יומן פעילות
+                📋 Activity Log
                 {logs.length > 0 && (
                   <span style={{
                     marginRight: 10, fontSize: 11, fontWeight: 400,
@@ -2664,7 +2663,7 @@ ABC Electronics`}
                 {/* Verbose toggle */}
                 <button
                   onClick={() => setVerboseLog(v => !v)}
-                  title={verboseLog ? "הסתר פרטים מורחבים" : "הצג פרטים מורחבים (פרטי שגיאות)"}
+                  title={verboseLog ? "Hide extended details" : "Show extended details (error info)"}
                   style={{
                     padding: "6px 14px", borderRadius: 8,
                     background: verboseLog ? "#A78BFA20" : "var(--surface2)",
@@ -2683,7 +2682,7 @@ ABC Electronics`}
                     background: "var(--surface2)", border: "1px solid var(--border)",
                     color: "var(--text3)", cursor: "pointer", fontSize: 11,
                   }}
-                >נקה</button>
+                >Clear</button>
               </div>
             </div>
 
@@ -2693,7 +2692,7 @@ ABC Electronics`}
             }}>
               {logs.length === 0 ? (
                 <div style={{ padding: 40, textAlign: "center", color: "var(--text3)", fontSize: 12 }}>
-                  אין רשומות ביומן עדיין
+                  No log entries yet
                 </div>
               ) : (
                 <div style={{ maxHeight: 560, overflowY: "auto" }}>
@@ -2830,7 +2829,7 @@ ABC Electronics`}
                 animation: "slideIn 0.2s ease",
               }}
             >
-              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>◂ חזרה שלב אחורה</div>
+              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>◂ Step Back</div>
               {rfq && (
                 <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 16 }}>
                   <span style={{ color: "var(--accent)", fontFamily: "monospace" }}>{rfq.partNumber}</span>
@@ -2841,7 +2840,7 @@ ABC Electronics`}
                 </div>
               )}
               <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 6, fontWeight: 600 }}>
-                סיבת החזרה <span style={{ color: "var(--red)" }}>*</span> (חובה)
+                Reason for step-back <span style={{ color: "var(--red)" }}>*</span> (required)
               </div>
               <textarea
                 autoFocus
@@ -2853,7 +2852,7 @@ ABC Electronics`}
                   }
                   if (e.key === 'Escape') { setBackModal(null); setBackComment(''); }
                 }}
-                placeholder="לדוגמה: לקוח ביקש שינוי בכמות, שגיאה בפרטים שנשלחו..."
+                placeholder="e.g. Customer requested quantity change, error in details sent..."
                 style={{
                   width: "100%", minHeight: 80, padding: "10px 12px",
                   borderRadius: 8, resize: "vertical", outline: "none",
@@ -2863,7 +2862,7 @@ ABC Electronics`}
                 }}
               />
               <div style={{ fontSize: 9, color: "var(--text3)", marginTop: 4, marginBottom: 16 }}>
-                Ctrl+Enter לאישור · Esc לביטול
+                Ctrl+Enter to confirm · Esc to cancel
               </div>
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                 <button
@@ -2873,7 +2872,7 @@ ABC Electronics`}
                     background: "var(--surface2)", border: "1px solid var(--border)",
                     color: "var(--text2)", cursor: "pointer", fontSize: 11,
                   }}
-                >ביטול</button>
+                >Cancel</button>
                 <button
                   onClick={() => backComment.trim() && revertStatus(backModal.rfqId, backComment.trim())}
                   disabled={!backComment.trim()}
@@ -2884,7 +2883,7 @@ ABC Electronics`}
                     border: "none", cursor: backComment.trim() ? "pointer" : "default",
                     fontSize: 11, fontWeight: 700, transition: "all 0.15s",
                   }}
-                >אשר חזרה</button>
+                >Confirm</button>
               </div>
             </div>
           </div>

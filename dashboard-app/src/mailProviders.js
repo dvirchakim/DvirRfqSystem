@@ -149,7 +149,7 @@ export function initOutlook(clientId, tenantId) {
 
 function requireInitialized() {
   if (!msalInstance) {
-    throw new Error("MSAL not initialized yet — נסה שוב בעוד רגע או בדוק שה-Client ID של Microsoft הוזן");
+    throw new Error("MSAL not initialized yet — please wait a moment or check that the Microsoft Client ID is set");
   }
   return msalInstance;
 }
