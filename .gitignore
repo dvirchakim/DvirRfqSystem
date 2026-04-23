@@ -1,0 +1,26 @@
+# Dependencies
+dashboard-app/node_modules/
+
+# Build output
+dashboard-app/dist/
+
+# Example / sample mail files
+example mails/
+dashboard-app/public/example-mails/
+dashboard-app/public/supplier-mails/
+suppliers response mails example/
+rfq-rfq-dashboard-deploy/
+rfq-rfq-dashboard-deploy.zip
+
+# Environment / secrets
+.env
+.env.*
+*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

@@ -1,0 +1,10 @@
+services:
+  rfq-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rfq-dashboard:latest
+    container_name: rfq-dashboard
+    ports:
+      - "8080:80"
+    restart: unless-stopped

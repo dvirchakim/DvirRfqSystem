@@ -1,0 +1,13 @@
+node_modules
+dist
+.vite
+.git
+.gitignore
+.vscode
+.idea
+npm-debug.log
+yarn-error.log
+*.log
+coverage
+.DS_Store
+Thumbs.db
