@@ -168,6 +168,7 @@ export default function LiveRFQDashboard() {
   const [ollamaModel, setOllamaModel] = useState(() => lsGet('rfq-ollama-model', 'llama3.1'));
   const [openrouterApiKey, setOpenrouterApiKey] = useState(() => lsGet('rfq-openrouter-key'));
   const [openrouterModel, setOpenrouterModel] = useState(() => lsGet('rfq-openrouter-model', 'anthropic/claude-3.5-sonnet'));
+  const [manualMode, setManualMode] = useState(() => lsGet('rfq-manual-mode', 'false') === 'true');
   const [selectedExample, setSelectedExample] = useState('');
 
   // Real mailbox (Gmail / Outlook)
@@ -224,11 +225,12 @@ export default function LiveRFQDashboard() {
     localStorage.setItem('rfq-ollama-model', ollamaModel || '');
     localStorage.setItem('rfq-openrouter-key', openrouterApiKey || '');
     localStorage.setItem('rfq-openrouter-model', openrouterModel || '');
+    localStorage.setItem('rfq-manual-mode', manualMode ? 'true' : 'false');
     localStorage.setItem('rfq-google-client-id', googleClientId || '');
     localStorage.setItem('rfq-ms-client-id', msClientId || '');
     localStorage.setItem('rfq-ms-tenant-id', msTenantId || '');
     localStorage.setItem('rfq-mail-provider', mailProvider || 'gmail');
-  }, [provider, anthropicApiKey, anthropicModel, openaiApiKey, openaiBaseUrl, openaiModel, ollamaBaseUrl, ollamaModel, openrouterApiKey, openrouterModel, googleClientId, msClientId, msTenantId, mailProvider]);
+  }, [provider, anthropicApiKey, anthropicModel, openaiApiKey, openaiBaseUrl, openaiModel, ollamaBaseUrl, ollamaModel, openrouterApiKey, openrouterModel, manualMode, googleClientId, msClientId, msTenantId, mailProvider]);
 
   // Persist RFQ list to localStorage whenever it changes
   useEffect(() => {
@@ -577,14 +579,14 @@ export default function LiveRFQDashboard() {
 
   // ─── Auto-poll loop ────────────────────────────────────────────────
   useEffect(() => {
-    if (isRunning && mailToken) {
+    if (isRunning && mailToken && !manualMode) {
       pollGmail();
       timerRef.current = setInterval(pollGmail, pollInterval * 1000);
       return () => clearInterval(timerRef.current);
     } else {
       clearInterval(timerRef.current);
     }
-  }, [isRunning, mailToken, pollInterval, pollGmail]);
+  }, [isRunning, mailToken, manualMode, pollInterval, pollGmail]);
 
   // ─── Manual test processing ────────────────────────────────────────
   const handleTestProcess = useCallback(async () => {
@@ -2199,10 +2201,36 @@ export default function LiveRFQDashboard() {
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>
                 🚀 System Control
               </div>
+              {/* Mode toggle */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                <button
+                  onClick={() => setManualMode(false)}
+                  style={{
+                    flex: 1, padding: "8px 0", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer",
+                    background: !manualMode ? "var(--accent)" : "var(--surface2)",
+                    color: !manualMode ? "#000" : "var(--text2)",
+                    border: `1px solid ${!manualMode ? "var(--accent)" : "var(--border)"}`,
+                  }}
+                >📡 Auto (Live Inbox)</button>
+                <button
+                  onClick={() => setManualMode(true)}
+                  style={{
+                    flex: 1, padding: "8px 0", borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: "pointer",
+                    background: manualMode ? "#A78BFA" : "var(--surface2)",
+                    color: manualMode ? "#000" : "var(--text2)",
+                    border: `1px solid ${manualMode ? "#A78BFA" : "var(--border)"}`,
+                  }}
+                >✋ Manual</button>
+              </div>
+              {manualMode && (
+                <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 14, lineHeight: 1.6, padding: "8px 12px", borderRadius: 8, background: "#A78BFA10", border: "1px solid #A78BFA30" }}>
+                  Manual mode — no mailbox needed. Process emails via the <button onClick={() => setActiveTab('test')} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", padding: 0, fontFamily: "inherit", textDecoration: "underline", fontSize: 10 }}>Test tab</button> (paste / upload / drag .eml).
+                </div>
+              )}
               <button
                 onClick={() => {
-                  if (!mailToken) {
-                    addLog("⚠️ Connect to a mailbox (Inbox tab) before starting", "warning");
+                  if (!manualMode && !mailToken) {
+                    addLog("⚠️ Connect to a mailbox first, or switch to Manual mode", "warning");
                     setActiveTab('inbox');
                     return;
                   }
@@ -2211,7 +2239,7 @@ export default function LiveRFQDashboard() {
                     return;
                   }
                   setIsRunning(!isRunning);
-                  addLog(isRunning ? "⏹️ System stopped" : `▶️ System started — polling every ${pollInterval} seconds`, "info");
+                  addLog(isRunning ? "⏹️ System stopped" : (manualMode ? "▶️ System started — manual mode (paste/upload emails in Test tab)" : `▶️ System started — polling every ${pollInterval} seconds`), "info");
                 }}
                 style={{
                   padding: "14px 32px", borderRadius: 12,
