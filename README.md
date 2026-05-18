@@ -31,8 +31,17 @@ An AI-powered procurement automation dashboard for **rfq Projects** — an Israe
 ### Windows — clone and run
 
 ```powershell
+# 1. Install Git (skip if already installed)
+winget install --id Git.Git -e --source winget
+
+# 2. Clone the repo
 git clone https://github.com/dvirchakim/DvirRfqSystem.git
 cd DvirRfqSystem
+
+# 3. Allow PowerShell scripts (one-time, no admin required)
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+# 4. Run setup
 .\setup.ps1
 ```
 
