@@ -31,8 +31,8 @@ An AI-powered procurement automation dashboard for **rfq Projects** — an Israe
 ### Windows — clone and run
 
 ```powershell
-git clone https://github.com/dvirchakim/RFQ-LIVE.git
-cd RFQ-LIVE
+git clone https://github.com/dvirchakim/DvirRfqSystem.git
+cd DvirRfqSystem
 .\setup.ps1
 ```
 
@@ -51,8 +51,8 @@ Re-run `setup.ps1` any time you pull new code — it rebuilds and restarts the c
 ### Linux / macOS — clone and run
 
 ```bash
-git clone https://github.com/dvirchakim/RFQ-LIVE.git
-cd RFQ-LIVE/dashboard-app
+git clone https://github.com/dvirchakim/DvirRfqSystem.git
+cd DvirRfqSystem/dashboard-app
 docker compose up -d --build
 ```
 
