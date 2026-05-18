@@ -143,6 +143,7 @@ export const OPENROUTER_MODELS = [
   { id: "mistralai/mistral-large",              label: "Mistral Large" },
   { id: "deepseek/deepseek-r1",                 label: "DeepSeek R1" },
   { id: "qwen/qwen-2.5-72b-instruct",           label: "Qwen 2.5 72B (multilingual)" },
+  { id: "nvidia/nemotron-3-super-120b-a12b:free", label: "NVIDIA Nemotron 3 Super 120B (FREE)" },
 ];
 
 // ─── Supplier response scoring ───────────────────────────────────────────────
