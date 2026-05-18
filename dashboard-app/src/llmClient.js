@@ -51,6 +51,31 @@ async function callOpenAI({ baseUrl, apiKey, model, prompt, system }) {
   return stripFences(text);
 }
 
+async function callOpenRouter({ apiKey, model, prompt, system }) {
+  if (!apiKey) return { error: "missing_key" };
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+      "HTTP-Referer": typeof window !== "undefined" ? window.location.origin : "app://rfq-rfq",
+      "X-Title": "rfq RFQ Dashboard",
+    },
+    body: JSON.stringify({
+      model: model || "anthropic/claude-3.5-sonnet",
+      max_tokens: 2000,
+      messages: [
+        ...(system ? [{ role: "system", content: system }] : []),
+        { role: "user", content: prompt },
+      ],
+    }),
+  });
+  const data = await res.json();
+  if (data.error) return { error: data.error.message || "api_error", detail: data };
+  const text = data?.choices?.[0]?.message?.content || "";
+  return stripFences(text);
+}
+
 async function callOllama({ baseUrl, model, prompt, system }) {
   const url = (baseUrl || "http://localhost:11434").replace(/\/$/, "") + "/api/chat";
   const res = await fetch(url, {
@@ -86,6 +111,11 @@ export async function callLLM(prompt, system, config) {
         baseUrl: config.ollamaBaseUrl, model: config.ollamaModel, prompt, system,
       });
     }
+    if (provider === "openrouter") {
+      return await callOpenRouter({
+        apiKey: config.openrouterApiKey, model: config.openrouterModel, prompt, system,
+      });
+    }
     return await callAnthropic({
       apiKey: config.anthropicApiKey, model: config.anthropicModel,
       prompt, system,
@@ -96,9 +126,23 @@ export async function callLLM(prompt, system, config) {
 }
 
 export const PROVIDERS = [
-  { id: "anthropic", label: "Anthropic (Claude)" },
-  { id: "openai",    label: "OpenAI-compatible" },
-  { id: "ollama",    label: "Ollama (Local)" },
+  { id: "anthropic",   label: "Anthropic (Claude)" },
+  { id: "openrouter", label: "OpenRouter" },
+  { id: "openai",     label: "OpenAI-compatible" },
+  { id: "ollama",     label: "Ollama (Local)" },
+];
+
+export const OPENROUTER_MODELS = [
+  { id: "anthropic/claude-3.5-sonnet",          label: "Claude 3.5 Sonnet" },
+  { id: "anthropic/claude-3-haiku",             label: "Claude 3 Haiku (fast)" },
+  { id: "openai/gpt-4o",                        label: "GPT-4o" },
+  { id: "openai/gpt-4o-mini",                   label: "GPT-4o Mini (cheap)" },
+  { id: "google/gemini-flash-1.5",              label: "Gemini Flash 1.5" },
+  { id: "google/gemini-pro-1.5",                label: "Gemini Pro 1.5" },
+  { id: "meta-llama/llama-3.1-70b-instruct",   label: "Llama 3.1 70B" },
+  { id: "mistralai/mistral-large",              label: "Mistral Large" },
+  { id: "deepseek/deepseek-r1",                 label: "DeepSeek R1" },
+  { id: "qwen/qwen-2.5-72b-instruct",           label: "Qwen 2.5 72B (multilingual)" },
 ];
 
 // ─── Supplier response scoring ───────────────────────────────────────────────

@@ -3,6 +3,7 @@ dashboard-app/node_modules/
 
 # Build output
 dashboard-app/dist/
+dashboard-app/dist-electron/
 
 # Example / sample mail files
 example mails/

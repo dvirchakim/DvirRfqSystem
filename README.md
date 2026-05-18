@@ -19,7 +19,7 @@ An AI-powered procurement automation dashboard for **rfq Projects** — an Israe
 | **Pipeline Tracking** | Full status workflow: `new → processing → parsed → ready → distributed → awaiting → completed` |
 | **Obsolete Detection** | Detects OBS/EOL/NRND parts from Hebrew and English variants, flags rows and detail panel |
 | **Export** | Export selected RFQs to Excel (.xlsx) or PDF (print-ready Hebrew RTL layout) |
-| **Multi-Provider LLM** | Works with Anthropic Claude, any OpenAI-compatible API, or local Ollama models |
+| **Multi-Provider LLM** | Works with Anthropic Claude, OpenRouter (300+ models), any OpenAI-compatible API, or local Ollama |
 | **Human-in-Loop Flag** | Mark any RFQ for manual review before supplier emails are sent |
 | **Audit Trail** | Every pipeline step-back requires a comment, stored in status history |
 | **Persistent Storage** | All RFQs and config survive page refresh via localStorage |
@@ -28,28 +28,39 @@ An AI-powered procurement automation dashboard for **rfq Projects** — an Israe
 
 ## Quick Start
 
-### One-liner deploy (Docker)
+### Windows — clone and run
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/dvirchakim/DvirRfqSystem/main/deploy.sh | bash
+```powershell
+git clone https://github.com/dvirchakim/RFQ-LIVE.git
+cd RFQ-LIVE
+.\setup.ps1
 ```
 
-Opens at **http://localhost:8080** when done. Requires [Docker Desktop](https://docker.com).
+`setup.ps1` will:
+1. Install **Docker Desktop** automatically (via `winget`) if it isn't already installed
+2. Build the container image from `dashboard-app/Dockerfile`
+3. Start the container on port **8080**
+4. Open `http://localhost:8080` in your browser
 
-To use a different port:
+Re-run `setup.ps1` any time you pull new code — it rebuilds and restarts the container.
+
+> **Requirement:** Docker Desktop must be running before the build step. The script will attempt to start it automatically.
+
+---
+
+### Linux / macOS — clone and run
+
 ```bash
-PORT=3000 bash <(curl -fsSL https://raw.githubusercontent.com/dvirchakim/DvirRfqSystem/main/deploy.sh)
+git clone https://github.com/dvirchakim/RFQ-LIVE.git
+cd RFQ-LIVE/dashboard-app
+docker compose up -d --build
 ```
 
-### Option B — Clone and run manually
+Opens at **http://localhost:8080**.
 
-```bash
-git clone https://github.com/dvirchakim/DvirRfqSystem.git
-cd DvirRfqSystem/dashboard-app
-docker compose up -d
-```
+---
 
-### Option C — Local dev server
+### Local dev (no Docker)
 
 ```bash
 cd dashboard-app

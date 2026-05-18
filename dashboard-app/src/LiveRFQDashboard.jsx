@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { parseEml } from "./emlParser.js";
-import { callLLM, PROVIDERS, SUPPLIER_PARSE_PROMPT, scoreSupplierResponse } from "./llmClient.js";
+import { callLLM, PROVIDERS, OPENROUTER_MODELS, SUPPLIER_PARSE_PROMPT, scoreSupplierResponse } from "./llmClient.js";
 import { exportToExcel, exportToPDF } from "./exportUtils.js";
 import {
   gmailSignIn, gmailListMessages, gmailFetchRaw, gmailSendMessage,
@@ -166,6 +166,8 @@ export default function LiveRFQDashboard() {
   const [openaiModel, setOpenaiModel] = useState(() => lsGet('rfq-openai-model', 'gpt-4o-mini'));
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState(() => lsGet('rfq-ollama-base', 'http://localhost:11434'));
   const [ollamaModel, setOllamaModel] = useState(() => lsGet('rfq-ollama-model', 'llama3.1'));
+  const [openrouterApiKey, setOpenrouterApiKey] = useState(() => lsGet('rfq-openrouter-key'));
+  const [openrouterModel, setOpenrouterModel] = useState(() => lsGet('rfq-openrouter-model', 'anthropic/claude-3.5-sonnet'));
   const [selectedExample, setSelectedExample] = useState('');
 
   // Real mailbox (Gmail / Outlook)
@@ -220,11 +222,13 @@ export default function LiveRFQDashboard() {
     localStorage.setItem('rfq-openai-model', openaiModel || '');
     localStorage.setItem('rfq-ollama-base', ollamaBaseUrl || '');
     localStorage.setItem('rfq-ollama-model', ollamaModel || '');
+    localStorage.setItem('rfq-openrouter-key', openrouterApiKey || '');
+    localStorage.setItem('rfq-openrouter-model', openrouterModel || '');
     localStorage.setItem('rfq-google-client-id', googleClientId || '');
     localStorage.setItem('rfq-ms-client-id', msClientId || '');
     localStorage.setItem('rfq-ms-tenant-id', msTenantId || '');
     localStorage.setItem('rfq-mail-provider', mailProvider || 'gmail');
-  }, [provider, anthropicApiKey, anthropicModel, openaiApiKey, openaiBaseUrl, openaiModel, ollamaBaseUrl, ollamaModel, googleClientId, msClientId, msTenantId, mailProvider]);
+  }, [provider, anthropicApiKey, anthropicModel, openaiApiKey, openaiBaseUrl, openaiModel, ollamaBaseUrl, ollamaModel, openrouterApiKey, openrouterModel, googleClientId, msClientId, msTenantId, mailProvider]);
 
   // Persist RFQ list to localStorage whenever it changes
   useEffect(() => {
@@ -247,12 +251,14 @@ export default function LiveRFQDashboard() {
     anthropicApiKey, anthropicModel,
     openaiApiKey, openaiBaseUrl, openaiModel,
     ollamaBaseUrl, ollamaModel,
-  }), [provider, anthropicApiKey, anthropicModel, openaiApiKey, openaiBaseUrl, openaiModel, ollamaBaseUrl, ollamaModel]);
+    openrouterApiKey, openrouterModel,
+  }), [provider, anthropicApiKey, anthropicModel, openaiApiKey, openaiBaseUrl, openaiModel, ollamaBaseUrl, ollamaModel, openrouterApiKey, openrouterModel]);
 
   const providerReady = (
     (provider === 'anthropic' && !!anthropicApiKey) ||
     (provider === 'openai' && !!openaiBaseUrl) ||
-    (provider === 'ollama' && !!ollamaBaseUrl)
+    (provider === 'ollama' && !!ollamaBaseUrl) ||
+    (provider === 'openrouter' && !!openrouterApiKey)
   );
   const [theme, setTheme] = useState(() => (typeof localStorage !== 'undefined' && localStorage.getItem('rfq-theme')) || 'dark');
   useEffect(() => {
@@ -1892,6 +1898,56 @@ export default function LiveRFQDashboard() {
                   />
                   <div style={{ fontSize: 10, color: "var(--amber)", lineHeight: 1.5 }}>
                     ⚠️ If the browser blocks CORS, start Ollama with: <code style={{fontFamily:"monospace"}}>OLLAMA_ORIGINS="*" ollama serve</code>
+                  </div>
+                </div>
+              )}
+
+              {provider === 'openrouter' && (
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ fontSize: 10, color: "var(--text2)" }}>OpenRouter API Key — get one at <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>openrouter.ai/keys</a></div>
+                  <input
+                    type="password"
+                    value={openrouterApiKey}
+                    onChange={e => setOpenrouterApiKey(e.target.value)}
+                    placeholder="sk-or-v1-..."
+                    style={{
+                      padding: "10px 14px", borderRadius: 8,
+                      background: "var(--surface2)", border: "1px solid var(--border)",
+                      color: "var(--text)", fontSize: 12, outline: "none",
+                      direction: "ltr", fontFamily: "monospace",
+                    }}
+                  />
+                  <div style={{ fontSize: 10, color: "var(--text2)" }}>Model</div>
+                  <select
+                    value={OPENROUTER_MODELS.some(m => m.id === openrouterModel) ? openrouterModel : '__custom__'}
+                    onChange={e => { if (e.target.value !== '__custom__') setOpenrouterModel(e.target.value); }}
+                    style={{
+                      padding: "10px 14px", borderRadius: 8,
+                      background: "var(--surface2)", border: "1px solid var(--border)",
+                      color: "var(--text)", fontSize: 12, outline: "none",
+                      direction: "ltr", cursor: "pointer",
+                    }}
+                  >
+                    {OPENROUTER_MODELS.map(m => (
+                      <option key={m.id} value={m.id}>{m.label} — {m.id}</option>
+                    ))}
+                    <option value="__custom__">Custom model ID…</option>
+                  </select>
+                  {!OPENROUTER_MODELS.some(m => m.id === openrouterModel) && (
+                    <input
+                      value={openrouterModel}
+                      onChange={e => setOpenrouterModel(e.target.value)}
+                      placeholder="provider/model-name"
+                      style={{
+                        padding: "10px 14px", borderRadius: 8,
+                        background: "var(--surface2)", border: "1px solid var(--border)",
+                        color: "var(--text)", fontSize: 12, outline: "none",
+                        direction: "ltr", fontFamily: "monospace",
+                      }}
+                    />
+                  )}
+                  <div style={{ fontSize: 9, color: "var(--text3)", lineHeight: 1.6 }}>
+                    Access 300+ models through one API. Pricing varies per model — check <a href="https://openrouter.ai/models" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>openrouter.ai/models</a>.
                   </div>
                 </div>
               )}
