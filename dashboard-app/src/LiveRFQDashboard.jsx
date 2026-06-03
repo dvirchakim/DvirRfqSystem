@@ -486,6 +486,7 @@ export default function LiveRFQDashboard() {
       if (/popup_window_error|popup_window_blocked|blocked/i.test(msg)) hint = ' — Browser blocked the popup. Allow popups for this site in the address bar.';
       else if (/user_cancelled/i.test(msg)) hint = ' — User closed the sign-in window.';
       else if (/AADSTS50194/i.test(msg)) hint = ' — App is single-tenant. Fill in Tenant ID or switch to multi-tenant.';
+      else if (/invalid_client|unauthorized_client/i.test(msg) && mailProvider === 'gmail') hint = ` — Google OAuth: add ${typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080'} to Authorized JavaScript Origins in Google Cloud Console → APIs & Services → Credentials.`;
       else if (/AADSTS|invalid_client|unauthorized_client/i.test(msg)) hint = ' — App configuration error in Entra (Client ID / Redirect URI / Scopes).';
       addLog(`❌ Connection failed: ${msg}${hint}`, "error");
       console.error("[mail connect]", e);
@@ -2263,9 +2264,25 @@ export default function LiveRFQDashboard() {
                   }}
                 />
                 <div style={{ fontSize: 9, color: "var(--text3)", lineHeight: 1.6 }}>
-                  Create in <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>Google Cloud Console</a> → OAuth 2.0 Client ID (Web application).
-                  Add to Authorized JavaScript origins: <code style={{ direction: "ltr", fontFamily: "monospace" }}>{typeof window !== "undefined" ? window.location.origin : "http://localhost:5173"}</code>.
-                  Enable the Gmail API for the project.
+                  1. Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>Google Cloud Console → Credentials</a><br />
+                  2. Edit your <b>Web application</b> OAuth 2.0 Client ID<br />
+                  3. Under <b>Authorized JavaScript origins</b> add exactly:
+                </div>
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginBottom: 4,
+                  background: "var(--surface3)", borderRadius: 6, padding: "7px 10px",
+                  border: "1px solid var(--accent)40",
+                }}>
+                  <code style={{ flex: 1, fontSize: 11, direction: "ltr", color: "var(--accent)", fontFamily: "monospace" }}>
+                    {typeof window !== "undefined" ? window.location.origin : "http://localhost:8080"}
+                  </code>
+                  <button
+                    onClick={() => { navigator.clipboard?.writeText(typeof window !== "undefined" ? window.location.origin : "http://localhost:8080"); addLog("📋 Origin copied", "success"); }}
+                    style={{ padding: "3px 8px", borderRadius: 5, background: "var(--accent)", color: "#000", border: "none", cursor: "pointer", fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" }}
+                  >Copy</button>
+                </div>
+                <div style={{ fontSize: 9, color: "var(--text3)", lineHeight: 1.6 }}>
+                  4. Also enable the <b>Gmail API</b> for the project (APIs &amp; Services → Library → Gmail API → Enable)
                 </div>
 
                 <div style={{ fontSize: 10, color: "var(--text2)", marginTop: 8 }}>Microsoft (Azure AD) Client ID</div>
