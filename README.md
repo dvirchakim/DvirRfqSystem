@@ -1,4 +1,4 @@
-# rfq RFQ Dashboard
+# RFQ Dashboard
 
 An AI-powered procurement automation dashboard for **rfq Projects** — an Israeli electronic components distributor. Processes incoming RFQ emails, extracts structured data using Claude AI, manages supplier outreach, and tracks the full procurement pipeline.
 
