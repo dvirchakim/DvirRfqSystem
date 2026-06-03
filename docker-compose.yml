@@ -27,7 +27,6 @@ services:
     environment:
       PORT:               "3001"
       DATABASE_URL:       postgresql://rfq_user:${POSTGRES_PASSWORD:-changeme}@postgres:5432/rfq_db
-      DATABASE_RO_URL:    postgresql://rfq_agent:${AGENT_DB_PASSWORD:-agent_changeme}@postgres:5432/rfq_db
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_MODEL:   ${OPENROUTER_MODEL:-nousresearch/hermes-3-llama-3-8b}
       FRONTEND_ORIGIN:    http://localhost:${PORT:-8080}

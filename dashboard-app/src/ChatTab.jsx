@@ -10,6 +10,12 @@ const SUGGESTED = [
   'Show only the RFQ table and customer insights in light mode.',
 ];
 
+// ── Conversation persistence (localStorage) ───────────────────────
+const CONV_KEY = 'rfq-chat-convs';
+const loadConvs    = ()      => { try { return JSON.parse(localStorage.getItem(CONV_KEY) || '[]'); } catch { return []; } };
+const saveConv     = (conv)  => { const list = loadConvs().filter(c => c.id !== conv.id); localStorage.setItem(CONV_KEY, JSON.stringify([conv, ...list].slice(0, 100))); };
+const deleteConvLS = (id)    => { localStorage.setItem(CONV_KEY, JSON.stringify(loadConvs().filter(c => c.id !== id))); };
+
 // ── Parse a fetch ReadableStream as SSE ──────────────────────────
 async function* streamSSE(response) {
   const reader  = response.body.getReader();
@@ -167,15 +173,19 @@ function MessageBubble({ msg }) {
 
 // ── Main ChatTab component ────────────────────────────────────────
 export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
-  const [messages,    setMessages]    = useState([]);
-  const [input,       setInput]       = useState('');
-  const [streaming,   setStreaming]   = useState(false);
-  const [layout,      setLayout]      = useState(null);
-  const [backendOk,   setBackendOk]   = useState(null);  // null=checking, true, false
-  const [showPreview, setShowPreview] = useState(true);
+  const [messages,       setMessages]       = useState([]);
+  const [input,          setInput]          = useState('');
+  const [streaming,      setStreaming]      = useState(false);
+  const [layout,         setLayout]         = useState(null);
+  const [backendOk,      setBackendOk]      = useState(null);
+  const [showPreview,    setShowPreview]    = useState(true);
+  const [showHistory,    setShowHistory]    = useState(false);
+  const [conversations,  setConversations]  = useState(() => loadConvs());
+  const [currentConvId,  setCurrentConvId]  = useState(null);
   const endRef     = useRef(null);
   const inputRef   = useRef(null);
-  const historyRef = useRef([]);    // plain messages for API
+  const historyRef = useRef([]);
+  const abortRef   = useRef(null);
 
   const getOrKey   = () => localStorage.getItem('rfq-openrouter-key')   || '';
   const getOrModel  = () => localStorage.getItem('rfq-openrouter-model') || 'nousresearch/hermes-3-llama-3-8b';
@@ -225,8 +235,11 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
     if (!trimmed || streaming) return;
     setInput('');
 
-    const userMsg  = { role: 'user', content: trimmed };
-    const msgId    = Date.now();
+    const convId = currentConvId || `conv-${Date.now()}`;
+    if (!currentConvId) setCurrentConvId(convId);
+
+    const userMsg = { role: 'user', content: trimmed };
+    const msgId   = Date.now();
     historyRef.current = [...historyRef.current, { role: 'user', content: trimmed }];
 
     setMessages(prev => [
@@ -236,14 +249,18 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
     ]);
     setStreaming(true);
 
+    const abort = new AbortController();
+    abortRef.current = abort;
+
     let contentAccum = '';
-    const pendingEvents    = [];
-    const pendingResults   = {};
+    const pendingEvents  = [];
+    const pendingResults = {};
 
     try {
       const res = await fetch(`${API}/chat`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal:  abort.signal,
         body:    JSON.stringify({
           messages: historyRef.current.slice(-20),
           userId,
@@ -261,6 +278,7 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
       }
 
       for await (const { event, data } of streamSSE(res)) {
+        if (abort.signal.aborted) break;
         let payload;
         try { payload = JSON.parse(data); } catch { continue; }
 
@@ -270,17 +288,13 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
             m.id === msgId ? { ...m, content: contentAccum } : m
           ));
         }
-
         if (event === 'tool_call') {
-          const evIdx = pendingEvents.length;
           pendingEvents.push({ type: 'tool_call', name: payload.name, args: payload.args });
           setMessages(prev => prev.map(m =>
             m.id === msgId ? { ...m, events: [...pendingEvents] } : m
           ));
         }
-
         if (event === 'tool_result') {
-          // Pair with most recent tool_call event of same name
           const idx = [...pendingEvents].reverse().findIndex(
             e => e.type === 'tool_call' && e.name === payload.name
           );
@@ -290,7 +304,6 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
             m.id === msgId ? { ...m, toolResults: { ...pendingResults } } : m
           ));
         }
-
         if (event === 'layout_update') {
           applyLayout(payload);
           pendingEvents.push({ type: 'layout_update', layout: payload });
@@ -298,33 +311,67 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
             m.id === msgId ? { ...m, events: [...pendingEvents] } : m
           ));
         }
-
         if (event === 'error') {
           contentAccum += `\n\n❌ ${payload.message}`;
           setMessages(prev => prev.map(m =>
             m.id === msgId ? { ...m, content: contentAccum } : m
           ));
         }
-
         if (event === 'done') break;
       }
 
-      historyRef.current = [
-        ...historyRef.current,
-        { role: 'assistant', content: contentAccum },
-      ];
+      if (!abort.signal.aborted) {
+        historyRef.current = [...historyRef.current, { role: 'assistant', content: contentAccum }];
+      }
 
     } catch (err) {
-      setMessages(prev => prev.map(m =>
-        m.id === msgId ? { ...m, content: `❌ ${err.message}`, streaming: false } : m
-      ));
+      if (err.name !== 'AbortError') {
+        setMessages(prev => prev.map(m =>
+          m.id === msgId ? { ...m, content: `❌ ${err.message}`, streaming: false } : m
+        ));
+      }
     } finally {
-      setMessages(prev => prev.map(m =>
-        m.id === msgId ? { ...m, streaming: false } : m
-      ));
+      abortRef.current = null;
       setStreaming(false);
+      setMessages(prev => {
+        const updated = prev.map(m =>
+          m.id === msgId
+            ? { ...m, streaming: false, ...(abort.signal.aborted && !m.content ? { content: '⏹ Stopped.' } : {}) }
+            : m
+        );
+        const title = updated.find(m => m.role === 'user')?.content?.slice(0, 60) || 'New chat';
+        saveConv({ id: convId, title, messages: updated, ts: Date.now() });
+        setConversations(loadConvs());
+        return updated;
+      });
     }
-  }, [input, streaming, userId, applyLayout]);
+  }, [input, streaming, userId, applyLayout, currentConvId]);
+
+  const stop = useCallback(() => { abortRef.current?.abort(); }, []);
+
+  const newChat = useCallback(() => {
+    setMessages([]);
+    historyRef.current = [];
+    setCurrentConvId(null);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
+
+  const loadConv = useCallback((conv) => {
+    setMessages(conv.messages || []);
+    historyRef.current = (conv.messages || [])
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ role: m.role, content: m.content }));
+    setCurrentConvId(conv.id);
+    setShowHistory(false);
+  }, []);
+
+  const deleteConv = useCallback((id, e) => {
+    e.stopPropagation();
+    deleteConvLS(id);
+    const updated = loadConvs();
+    setConversations(updated);
+    if (id === currentConvId) newChat();
+  }, [currentConvId, newChat]);
 
   const handleKey = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
@@ -332,7 +379,82 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
 
   // ── Render ────────────────────────────────────────────────────
   return (
-    <div style={{ display: 'flex', gap: 16, height: 'calc(100vh - 160px)', minHeight: 400, animation: 'slideIn 0.3s ease' }}>
+    <div style={{ display: 'flex', gap: 0, height: 'calc(100vh - 160px)', minHeight: 400, animation: 'slideIn 0.3s ease' }}>
+
+      {/* ── History sidebar ────────────────────────────────────── */}
+      {showHistory && (
+        <div style={{
+          width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column',
+          borderRight: '1px solid var(--border)', paddingRight: 12, marginRight: 16,
+          overflowY: 'auto',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)' }}>💬 History</span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {conversations.length > 0 && (
+                <button
+                  onClick={() => { if (window.confirm('Clear all conversation history?')) { localStorage.removeItem(CONV_KEY); setConversations([]); newChat(); } }}
+                  title="Clear all"
+                  style={{ padding: '2px 7px', borderRadius: 5, fontSize: 10, cursor: 'pointer', background: 'var(--red)15', color: 'var(--red)', border: '1px solid var(--red)30' }}
+                >Clear all</button>
+              )}
+              <button
+                onClick={() => setShowHistory(false)}
+                style={{ padding: '2px 7px', borderRadius: 5, fontSize: 10, cursor: 'pointer', background: 'var(--surface2)', color: 'var(--text3)', border: '1px solid var(--border)' }}
+              >✕</button>
+            </div>
+          </div>
+
+          <button
+            onClick={newChat}
+            style={{
+              padding: '8px 10px', borderRadius: 8, marginBottom: 8, fontSize: 11, fontWeight: 600,
+              cursor: 'pointer', background: 'var(--accent)15', color: 'var(--accent)',
+              border: '1px solid var(--accent)40', textAlign: 'left',
+            }}
+          >+ New chat</button>
+
+          {conversations.length === 0 && (
+            <div style={{ fontSize: 11, color: 'var(--text3)', padding: '12px 0', textAlign: 'center' }}>No conversations yet</div>
+          )}
+
+          {conversations.map(conv => (
+            <div
+              key={conv.id}
+              onClick={() => loadConv(conv)}
+              style={{
+                padding: '8px 10px', borderRadius: 8, marginBottom: 4, cursor: 'pointer',
+                background: conv.id === currentConvId ? 'var(--accent)15' : 'transparent',
+                border: `1px solid ${conv.id === currentConvId ? 'var(--accent)40' : 'transparent'}`,
+                display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                gap: 6, transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => { if (conv.id !== currentConvId) e.currentTarget.style.background = 'var(--surface2)'; }}
+              onMouseLeave={e => { if (conv.id !== currentConvId) e.currentTarget.style.background = 'transparent'; }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: conv.id === currentConvId ? 600 : 400 }}>
+                  {conv.title}
+                </div>
+                <div style={{ fontSize: 9, color: 'var(--text3)', marginTop: 2 }}>
+                  {new Date(conv.ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+              <button
+                onClick={e => deleteConv(conv.id, e)}
+                title="Delete"
+                style={{
+                  flexShrink: 0, padding: '1px 5px', borderRadius: 4, fontSize: 10,
+                  cursor: 'pointer', background: 'transparent', color: 'var(--text3)',
+                  border: 'none', opacity: 0.6,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--red)'; e.currentTarget.style.opacity = '1'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text3)'; e.currentTarget.style.opacity = '0.6'; }}
+              >🗑</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── Chat panel ─────────────────────────────────────────── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -348,16 +470,37 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
               {backendOk === true  && !getOrKey() && <span style={{ color: 'var(--amber)', marginLeft: 6 }}>⚠ Add OpenRouter key in Settings → OpenRouter tab first</span>}
             </div>
           </div>
-          <button
-            onClick={() => setShowPreview(p => !p)}
-            style={{
-              padding: '5px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600,
-              cursor: 'pointer', background: 'var(--surface2)', color: 'var(--text2)',
-              border: '1px solid var(--border)',
-            }}
-          >
-            {showPreview ? 'Hide Preview' : 'Show Preview'}
-          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={() => { setShowHistory(h => !h); }}
+              style={{
+                padding: '5px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600,
+                cursor: 'pointer', background: showHistory ? 'var(--accent)20' : 'var(--surface2)',
+                color: showHistory ? 'var(--accent)' : 'var(--text2)',
+                border: `1px solid ${showHistory ? 'var(--accent)40' : 'var(--border)'}`,
+              }}
+            >
+              💬 History {conversations.length > 0 && `(${conversations.length})`}
+            </button>
+            <button
+              onClick={newChat}
+              style={{
+                padding: '5px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600,
+                cursor: 'pointer', background: 'var(--surface2)', color: 'var(--text2)',
+                border: '1px solid var(--border)',
+              }}
+            >+ New</button>
+            <button
+              onClick={() => setShowPreview(p => !p)}
+              style={{
+                padding: '5px 10px', borderRadius: 6, fontSize: 10, fontWeight: 600,
+                cursor: 'pointer', background: 'var(--surface2)', color: 'var(--text2)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {showPreview ? 'Hide Preview' : 'Show Preview'}
+            </button>
+          </div>
         </div>
 
         {/* Messages area */}
@@ -410,7 +553,7 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKey}
             disabled={streaming || backendOk === false}
-            placeholder={backendOk === false ? 'Backend not available — check .env setup' : 'Ask a question or request a layout change… (Enter to send)'}
+            placeholder={backendOk === false ? 'Backend not available — check docker-compose' : 'Ask a question or request a layout change… (Enter to send)'}
             rows={2}
             style={{
               flex: 1, resize: 'none', outline: 'none',
@@ -419,19 +562,30 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
               fontFamily: 'inherit',
             }}
           />
-          <button
-            onClick={() => send()}
-            disabled={!input.trim() || streaming || backendOk === false}
-            style={{
-              padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 700,
-              cursor: (!input.trim() || streaming) ? 'default' : 'pointer',
-              background: (!input.trim() || streaming) ? 'var(--surface3)' : 'var(--accent)',
-              color:  (!input.trim() || streaming) ? 'var(--text3)' : '#000',
-              border: 'none', alignSelf: 'flex-end', whiteSpace: 'nowrap',
-            }}
-          >
-            {streaming ? '⏳' : '▶ Send'}
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignSelf: 'flex-end' }}>
+            {streaming ? (
+              <button
+                onClick={stop}
+                style={{
+                  padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                  cursor: 'pointer', background: 'var(--red)', color: '#fff',
+                  border: 'none', whiteSpace: 'nowrap', animation: 'pulse 1.2s ease-in-out infinite',
+                }}
+              >⏹ Stop</button>
+            ) : (
+              <button
+                onClick={() => send()}
+                disabled={!input.trim() || backendOk === false}
+                style={{
+                  padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                  cursor: !input.trim() ? 'default' : 'pointer',
+                  background: !input.trim() ? 'var(--surface3)' : 'var(--accent)',
+                  color:  !input.trim() ? 'var(--text3)' : '#000',
+                  border: 'none', whiteSpace: 'nowrap',
+                }}
+              >▶ Send</button>
+            )}
+          </div>
         </div>
       </div>
 
