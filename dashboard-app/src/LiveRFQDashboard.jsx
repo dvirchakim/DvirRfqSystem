@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { ChatTab } from "./ChatTab.jsx";
 import { parseEml } from "./emlParser.js";
 import { callLLM, PROVIDERS, OPENROUTER_MODELS, SUPPLIER_PARSE_PROMPT, scoreSupplierResponse } from "./llmClient.js";
 import { exportToExcel, exportToPDF } from "./exportUtils.js";
@@ -167,6 +168,7 @@ export default function LiveRFQDashboard() {
   const [logs, setLogs] = useState([]);
   const [selectedRfq, setSelectedRfq] = useState(null);
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [agentLayout, setAgentLayout] = useState(null);
   const [filterText, setFilterText] = useState("");
   const [testEmail, setTestEmail] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1055,6 +1057,7 @@ export default function LiveRFQDashboard() {
           { id: "config", label: "Configuration", icon: <SettingsIcon size={14} /> },
           { id: "test", label: "Test / Manual", icon: <ZapIcon size={14} /> },
           { id: "logs", label: "Activity Log", icon: <ClockIcon size={14} /> },
+          { id: "chat", label: "AI Agent", icon: <span style={{ fontSize: 14 }}>🤖</span> },
         ].map(tab => (
           <button
             key={tab.id}
@@ -3104,6 +3107,15 @@ ABC Electronics`}
               </div>
             </div>
           </div>
+        )}
+
+        {/* ━━━ CHAT TAB ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+        {activeTab === "chat" && (
+          <ChatTab
+            rfqs={rfqs}
+            userId={googleClientId || msClientId || "default"}
+            onLayoutUpdate={layout => setAgentLayout(layout)}
+          />
         )}
 
         {/* ━━━ LOGS TAB ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
