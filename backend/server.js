@@ -20,7 +20,7 @@ app.use(express.json({ limit: '4mb' }));
 app.get('/api/health', async (_req, res) => {
   let dbOk = false;
   try { await testConnection(); dbOk = true; } catch { /* noop */ }
-  res.json({ ok: true, model: MODEL, db: dbOk, keySet: !!OPENROUTER_API_KEY });
+  res.json({ ok: true, model: MODEL, db: dbOk, keySet: !!OPENROUTER_API_KEY, acceptsClientKey: true });
 });
 
 // ── Sync RFQs from frontend ───────────────────────────────────────
@@ -182,11 +182,13 @@ Rules:
 
 // ── Chat endpoint — SSE streaming ─────────────────────────────────
 app.post('/api/chat', async (req, res) => {
-  if (!OPENROUTER_API_KEY) {
-    return res.status(503).json({ error: 'OPENROUTER_API_KEY is not configured on the server.' });
-  }
+  const { messages = [], userId = 'default', apiKey: clientApiKey, model: clientModel } = req.body;
+  const resolvedKey   = OPENROUTER_API_KEY || clientApiKey || '';
+  const resolvedModel = clientModel || MODEL;
 
-  const { messages = [], userId = 'default' } = req.body;
+  if (!resolvedKey) {
+    return res.status(503).json({ error: 'No OpenRouter API key — add one in Settings → OpenRouter.' });
+  }
 
   res.setHeader('Content-Type',  'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -211,13 +213,13 @@ app.post('/api/chat', async (req, res) => {
       const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method:  'POST',
         headers: {
-          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+          'Authorization': `Bearer ${resolvedKey}`,
           'Content-Type':  'application/json',
           'HTTP-Referer':  FRONTEND_ORIGIN,
           'X-Title':       'DvirRfqSystem',
         },
         body: JSON.stringify({
-          model:         MODEL,
+          model:         resolvedModel,
           messages:      allMessages,
           tools:         TOOLS,
           tool_choice:   'auto',

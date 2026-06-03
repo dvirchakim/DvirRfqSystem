@@ -177,11 +177,14 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
   const inputRef   = useRef(null);
   const historyRef = useRef([]);    // plain messages for API
 
+  const getOrKey   = () => localStorage.getItem('rfq-openrouter-key')   || '';
+  const getOrModel  = () => localStorage.getItem('rfq-openrouter-model') || 'nousresearch/hermes-3-llama-3-8b';
+
   // Check backend health on mount
   useEffect(() => {
     fetch(`${API}/health`)
       .then(r => r.json())
-      .then(d => setBackendOk(d.keySet))
+      .then(d => setBackendOk(d.ok && (d.keySet || d.acceptsClientKey)))
       .catch(() => setBackendOk(false));
   }, []);
 
@@ -242,8 +245,10 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          messages: historyRef.current.slice(-20),  // last 20 turns
+          messages: historyRef.current.slice(-20),
           userId,
+          apiKey: getOrKey(),
+          model:  getOrModel(),
         }),
       });
 
@@ -337,9 +342,10 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
           <div>
             <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--accent)' }}>🤖 AI Agent</h2>
             <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>
-              {backendOk === null && '⏳ Checking backend…'}
-              {backendOk === true  && '✅ Connected · Hermes-3 via OpenRouter'}
-              {backendOk === false && '⚠ Backend unavailable — set OPENROUTER_API_KEY in docker-compose .env'}
+              {backendOk === null  && '⧏ Checking backend…'}
+              {backendOk === true  && `✅ Connected · ${getOrModel()}`}
+              {backendOk === false && '⚠ Backend unreachable — is docker-compose running?'}
+              {backendOk === true  && !getOrKey() && <span style={{ color: 'var(--amber)', marginLeft: 6 }}>⚠ Add OpenRouter key in Settings → OpenRouter tab first</span>}
             </div>
           </div>
           <button
