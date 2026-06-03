@@ -5,8 +5,11 @@ function stripFences(text) {
   return (text || "").replace(/```json|```/g, "").trim();
 }
 
-async function callAnthropic({ apiKey, model, prompt, system }) {
+async function callAnthropic({ apiKey, model, prompt, system, imageData, imageMimeType }) {
   if (!apiKey) return { error: "missing_key" };
+  const userContent = imageData
+    ? [{ type: "image", source: { type: "base64", media_type: imageMimeType || "image/jpeg", data: imageData } }, { type: "text", text: prompt }]
+    : prompt;
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -19,7 +22,7 @@ async function callAnthropic({ apiKey, model, prompt, system }) {
       model: model || "claude-sonnet-4-6",
       max_tokens: 2000,
       system: system || "You are a helpful assistant.",
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "user", content: userContent }],
     }),
   });
   const data = await res.json();
@@ -28,11 +31,14 @@ async function callAnthropic({ apiKey, model, prompt, system }) {
   return stripFences(text);
 }
 
-async function callOpenAI({ baseUrl, apiKey, model, prompt, system }) {
+async function callOpenAI({ baseUrl, apiKey, model, prompt, system, imageData, imageMimeType }) {
   if (!baseUrl) return { error: "missing_base_url" };
   const url = baseUrl.replace(/\/$/, "") + "/chat/completions";
   const headers = { "Content-Type": "application/json" };
   if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+  const userContent = imageData
+    ? [{ type: "image_url", image_url: { url: `data:${imageMimeType || "image/jpeg"};base64,${imageData}` } }, { type: "text", text: prompt }]
+    : prompt;
   const res = await fetch(url, {
     method: "POST",
     headers,
@@ -41,7 +47,7 @@ async function callOpenAI({ baseUrl, apiKey, model, prompt, system }) {
       max_tokens: 2000,
       messages: [
         ...(system ? [{ role: "system", content: system }] : []),
-        { role: "user", content: prompt },
+        { role: "user", content: userContent },
       ],
     }),
   });
@@ -51,8 +57,11 @@ async function callOpenAI({ baseUrl, apiKey, model, prompt, system }) {
   return stripFences(text);
 }
 
-async function callOpenRouter({ apiKey, model, prompt, system }) {
+async function callOpenRouter({ apiKey, model, prompt, system, imageData, imageMimeType }) {
   if (!apiKey) return { error: "missing_key" };
+  const userContent = imageData
+    ? [{ type: "image_url", image_url: { url: `data:${imageMimeType || "image/jpeg"};base64,${imageData}` } }, { type: "text", text: prompt }]
+    : prompt;
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -66,7 +75,7 @@ async function callOpenRouter({ apiKey, model, prompt, system }) {
       max_tokens: 2000,
       messages: [
         ...(system ? [{ role: "system", content: system }] : []),
-        { role: "user", content: prompt },
+        { role: "user", content: userContent },
       ],
     }),
   });
@@ -76,8 +85,11 @@ async function callOpenRouter({ apiKey, model, prompt, system }) {
   return stripFences(text);
 }
 
-async function callOllama({ baseUrl, model, prompt, system }) {
+async function callOllama({ baseUrl, model, prompt, system, imageData }) {
   const url = (baseUrl || "http://localhost:11434").replace(/\/$/, "") + "/api/chat";
+  const userMsg = imageData
+    ? { role: "user", content: prompt, images: [imageData] }
+    : { role: "user", content: prompt };
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -86,7 +98,7 @@ async function callOllama({ baseUrl, model, prompt, system }) {
       stream: false,
       messages: [
         ...(system ? [{ role: "system", content: system }] : []),
-        { role: "user", content: prompt },
+        userMsg,
       ],
     }),
   });
@@ -97,28 +109,28 @@ async function callOllama({ baseUrl, model, prompt, system }) {
   return stripFences(text);
 }
 
-export async function callLLM(prompt, system, config) {
+export async function callLLM(prompt, system, config, imageData, imageMimeType) {
   const { provider } = config || {};
   try {
     if (provider === "openai") {
       return await callOpenAI({
         baseUrl: config.openaiBaseUrl, apiKey: config.openaiApiKey,
-        model: config.openaiModel, prompt, system,
+        model: config.openaiModel, prompt, system, imageData, imageMimeType,
       });
     }
     if (provider === "ollama") {
       return await callOllama({
-        baseUrl: config.ollamaBaseUrl, model: config.ollamaModel, prompt, system,
+        baseUrl: config.ollamaBaseUrl, model: config.ollamaModel, prompt, system, imageData,
       });
     }
     if (provider === "openrouter") {
       return await callOpenRouter({
-        apiKey: config.openrouterApiKey, model: config.openrouterModel, prompt, system,
+        apiKey: config.openrouterApiKey, model: config.openrouterModel, prompt, system, imageData, imageMimeType,
       });
     }
     return await callAnthropic({
       apiKey: config.anthropicApiKey, model: config.anthropicModel,
-      prompt, system,
+      prompt, system, imageData, imageMimeType,
     });
   } catch (e) {
     return { error: e.message || String(e), detail: e };

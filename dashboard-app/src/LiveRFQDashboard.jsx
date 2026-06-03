@@ -137,6 +137,21 @@ async function searchGmail(query) {
   }
 }
 
+// ─── PDF text extraction (pdfjs-dist, lazy-loaded) ─────────────────────────
+async function extractPdfText(file) {
+  const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist');
+  GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
+  const data = await file.arrayBuffer();
+  const pdf  = await getDocument({ data: new Uint8Array(data) }).promise;
+  const pages = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page    = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    pages.push(content.items.map(s => s.str).join(' '));
+  }
+  return pages.join('\n').trim();
+}
+
 // ─── Main Dashboard ─────────────────────────────────────────────────────
 export default function LiveRFQDashboard() {
   const [isRunning, setIsRunning] = useState(false);
@@ -170,6 +185,11 @@ export default function LiveRFQDashboard() {
   const [openrouterModel, setOpenrouterModel] = useState(() => lsGet('rfq-openrouter-model', 'anthropic/claude-3.5-sonnet'));
   const [manualMode, setManualMode] = useState(() => lsGet('rfq-manual-mode', 'false') === 'true');
   const [selectedExample, setSelectedExample] = useState('');
+  const [collapsedClients, setCollapsedClients] = useState(new Set());
+  const [testEmailImage, setTestEmailImage]     = useState(null); // { data, mimeType, dataUrl }
+  const [uploadedFileName, setUploadedFileName] = useState('');
+  const [testUploadLoading, setTestUploadLoading] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Real mailbox (Gmail / Outlook)
   const [googleClientId, setGoogleClientId] = useState(() => lsGet('rfq-google-client-id'));
@@ -317,7 +337,7 @@ export default function LiveRFQDashboard() {
   }, []);
 
   // ─── Process a single email text with Claude ───────────────────────
-  const processEmail = useCallback(async (emailText, emailId) => {
+  const processEmail = useCallback(async (emailText, emailId, imageData = null, imageMimeType = null) => {
     if (processedIdsRef.current.has(emailId)) return null;
     markProcessed(emailId);
 
@@ -334,9 +354,13 @@ export default function LiveRFQDashboard() {
 
     try {
       const result = await callLLM(
-        `Parse this RFQ email:\n\n${emailText}`,
+        imageData && !emailText.trim()
+          ? 'Please parse this RFQ from the image. Extract all part numbers, quantities, delivery dates, customer name, and other relevant fields.'
+          : `Parse this RFQ email:\n\n${emailText}`,
         PARSE_PROMPT,
-        llmConfig
+        llmConfig,
+        imageData,
+        imageMimeType
       );
 
       if (!result || typeof result === 'object') {
@@ -588,12 +612,51 @@ export default function LiveRFQDashboard() {
     }
   }, [isRunning, mailToken, manualMode, pollInterval, pollGmail]);
 
+  // ─── File upload handler ───────────────────────────────────────────
+  const handleFileUpload = useCallback(async (file) => {
+    setUploadedFileName(file.name);
+    setTestEmailImage(null);
+    setTestUploadLoading(true);
+    try {
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (ext === 'eml') {
+        const text   = await file.text();
+        const parsed = parseEml(text);
+        setTestEmail(parsed.text || text);
+      } else if (ext === 'pdf') {
+        const text = await extractPdfText(file);
+        setTestEmail(text);
+      } else if (file.type.startsWith('image/')) {
+        await new Promise(resolve => {
+          const reader = new FileReader();
+          reader.onload = e => {
+            const dataUrl = e.target.result;
+            const base64  = dataUrl.split(',')[1];
+            setTestEmailImage({ data: base64, mimeType: file.type, dataUrl });
+            setTestEmail('');
+            resolve();
+          };
+          reader.readAsDataURL(file);
+        });
+      } else {
+        setTestEmail(await file.text());
+      }
+    } catch (err) {
+      addLog(`❌ File read error: ${err.message}`, 'error');
+    } finally {
+      setTestUploadLoading(false);
+    }
+  }, [addLog]);
+
   // ─── Manual test processing ────────────────────────────────────────
   const handleTestProcess = useCallback(async () => {
-    if (!testEmail.trim()) return;
-    await processEmail(testEmail, `test-${Date.now()}`);
-    setTestEmail("");
-  }, [testEmail, processEmail]);
+    if (!testEmail.trim() && !testEmailImage) return;
+    const prompt = testEmail.trim() || 'Please parse the RFQ from this image.';
+    await processEmail(prompt, `test-${Date.now()}`, testEmailImage?.data, testEmailImage?.mimeType);
+    setTestEmail('');
+    setTestEmailImage(null);
+    setUploadedFileName('');
+  }, [testEmail, testEmailImage, processEmail]);
 
   // ─── Advance RFQ status ────────────────────────────────────────────
   const advanceStatus = useCallback((rfqId) => {
@@ -652,7 +715,6 @@ export default function LiveRFQDashboard() {
 <table border="1" cellpadding="7" cellspacing="0" style="border-collapse:collapse;min-width:380px">
   <tr><th style="background:#f4f6fa;text-align:left;width:160px">Part Number</th><td><b style="font-family:monospace">${rfq.partNumber}</b></td></tr>
   <tr><th style="background:#f4f6fa;text-align:left">Quantity</th><td>${rfq.quantity?.toLocaleString()} pcs</td></tr>
-  <tr><th style="background:#f4f6fa;text-align:left">End Customer</th><td>${rfq.customerName}</td></tr>
   <tr><th style="background:#f4f6fa;text-align:left">Required Delivery</th><td>${rfq.deliveryDate || 'ASAP — please advise lead time'}</td></tr>
   <tr><th style="background:#f4f6fa;text-align:left">Target Price</th><td>${rfq.targetPrice != null ? '$' + rfq.targetPrice + ' / unit' : 'Open — please quote best price'}</td></tr>
   <tr><th style="background:#f4f6fa;text-align:left">Accepts Alternatives</th><td>${rfq.acceptsAlternatives}</td></tr>
@@ -679,7 +741,7 @@ export default function LiveRFQDashboard() {
       return;
     }
     setSendingSuppliers(true);
-    const subject = `RFQ — ${rfq.partNumber} | ${rfq.customerName}`;
+    const subject = `RFQ — ${rfq.partNumber}`;
     const body = buildSupplierEmail(rfq);
     let sent = 0;
     for (const sup of supplierList) {
@@ -820,6 +882,28 @@ export default function LiveRFQDashboard() {
     }
     return result;
   }, [rfqs, filterText, showObsoleteOnly, filterStatus]);
+
+  const groupedByClient = useMemo(() => {
+    const map = new Map();
+    filteredRfqs.forEach(rfq => {
+      const key = rfq.customerName || '—';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(rfq);
+    });
+    return [...map.entries()].sort(([, a], [, b]) => {
+      const la = Math.max(...a.map(r => new Date(r.createdAt).getTime() || 0));
+      const lb = Math.max(...b.map(r => new Date(r.createdAt).getTime() || 0));
+      return lb - la;
+    });
+  }, [filteredRfqs]);
+
+  const toggleClient = useCallback((name) => {
+    setCollapsedClients(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  }, []);
 
   const statusCounts = useMemo(() => {
     const c = {};
@@ -1216,11 +1300,34 @@ export default function LiveRFQDashboard() {
                     <div style={{ fontSize: 13, marginBottom: 6 }}>No RFQs yet</div>
                     <div style={{ fontSize: 11 }}>Connect Gmail and start the system, or paste an email in the Test tab</div>
                   </div>
-                ) : filteredRfqs.map((rfq, i) => {
-                  const st = STATUS[rfq.status] || STATUS.new;
-                  const isSelected = selectedRfq?.id === rfq.id;
-                  const isChecked  = !!checkedRfqIds[rfq.id];
+                ) : groupedByClient.map(([clientName, clientRfqs]) => {
+                  const isClientCollapsed = collapsedClients.has(clientName);
+                  const highCount = clientRfqs.filter(r => r.priority === 'high').length;
+                  const obsCount  = clientRfqs.filter(r => r.isObsolete).length;
                   return (
+                    <div key={clientName}>
+                      {/* ── Client group header ── */}
+                      <div
+                        onClick={() => toggleClient(clientName)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 10,
+                          padding: "7px 16px", background: "var(--surface2)",
+                          borderBottom: "1px solid var(--border)",
+                          cursor: "pointer", userSelect: "none",
+                        }}
+                      >
+                        <span style={{ fontSize: 10, color: "var(--text3)", width: 12 }}>{isClientCollapsed ? "▶" : "▼"}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text)", flex: 1 }}>{clientName}</span>
+                        <span style={{ fontSize: 9, color: "var(--text3)", marginRight: 6 }}>{clientRfqs.length} part{clientRfqs.length !== 1 ? "s" : ""}</span>
+                        {highCount > 0 && <span style={{ fontSize: 8, fontWeight: 700, padding: "1px 5px", borderRadius: 3, background: "#F8717120", color: "var(--red)", border: "1px solid #F8717130" }}>HIGH</span>}
+                        {obsCount > 0 && <span style={{ fontSize: 8, fontWeight: 700, padding: "1px 5px", borderRadius: 3, background: "#FB923C20", color: "#FB923C", border: "1px solid #FB923C30", marginLeft: 4 }}>OBS</span>}
+                      </div>
+                      {/* ── Parts rows ── */}
+                      {!isClientCollapsed && clientRfqs.map((rfq, i) => {
+                      const st = STATUS[rfq.status] || STATUS.new;
+                      const isSelected = selectedRfq?.id === rfq.id;
+                      const isChecked  = !!checkedRfqIds[rfq.id];
+                      return (
                     <div
                       key={rfq.id}
                       onClick={() => setSelectedRfq(isSelected ? null : rfq)}
@@ -1356,6 +1463,9 @@ export default function LiveRFQDashboard() {
                           onMouseLeave={e => { e.currentTarget.style.opacity = 0.5; e.currentTarget.style.color = "var(--text3)"; }}
                         >×</button>
                       </div>
+                    </div>
+                      );
+                      })}
                     </div>
                   );
                 })}
@@ -2311,13 +2421,49 @@ export default function LiveRFQDashboard() {
               </button>
             </div>
 
+            {/* ── File upload zone ── */}
+            <div
+              onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--accent)'; }}
+              onDragLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+              onDrop={async e => {
+                e.preventDefault();
+                e.currentTarget.style.borderColor = 'var(--border)';
+                const file = e.dataTransfer.files[0];
+                if (file) await handleFileUpload(file);
+              }}
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                border: '2px dashed var(--border)', borderRadius: 10, padding: 14,
+                textAlign: 'center', cursor: 'pointer', marginBottom: 12,
+                background: 'var(--surface)', transition: 'border-color 0.2s',
+              }}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".eml,.pdf,image/jpeg,image/png,image/webp,image/jpg"
+                style={{ display: 'none' }}
+                onChange={e => { if (e.target.files[0]) handleFileUpload(e.target.files[0]); e.target.value = ''; }}
+              />
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                {testUploadLoading
+                  ? '⏳ Extracting text…'
+                  : uploadedFileName
+                    ? <span>✅ <b>{uploadedFileName}</b> loaded &mdash; <span onClick={ev => { ev.stopPropagation(); setTestEmailImage(null); setUploadedFileName(''); setTestEmail(''); }} style={{ color: 'var(--red)', cursor: 'pointer', textDecoration: 'underline' }}>clear</span></span>
+                    : <>📎 Drop or click — <b>.eml</b>, <b>PDF</b>, or <b>image</b> (JPG / PNG / WEBP)</>}
+              </div>
+              {testEmailImage && (
+                <img src={testEmailImage.dataUrl} alt="preview" style={{ maxHeight: 100, maxWidth: '100%', borderRadius: 6, marginTop: 8, objectFit: 'contain' }} />
+              )}
+            </div>
+
             <div style={{
               background: "var(--surface)", border: "1px solid var(--border)",
               borderRadius: 12, padding: 20,
             }}>
               <textarea
                 value={testEmail}
-                onChange={e => setTestEmail(e.target.value)}
+                onChange={e => { setTestEmail(e.target.value); if (e.target.value) { setTestEmailImage(null); setUploadedFileName(''); } }}
                 placeholder={`Paste an RFQ email here for testing...
 
 Example:
@@ -2342,7 +2488,7 @@ Example:
                 </span>
                 <button
                   onClick={handleTestProcess}
-                  disabled={isProcessing || !testEmail.trim()}
+                  disabled={isProcessing || (!testEmail.trim() && !testEmailImage)}
                   style={{
                     padding: "10px 24px", borderRadius: 10,
                     background: isProcessing ? "var(--surface3)" : "var(--amber)",
@@ -2350,7 +2496,7 @@ Example:
                     border: "none", cursor: isProcessing ? "default" : "pointer",
                     fontSize: 12, fontWeight: 700,
                     display: "flex", alignItems: "center", gap: 8,
-                    opacity: !testEmail.trim() ? 0.4 : 1,
+                    opacity: (!testEmail.trim() && !testEmailImage) ? 0.4 : 1,
                   }}
                 >
                   {isProcessing ? (
