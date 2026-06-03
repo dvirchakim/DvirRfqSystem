@@ -189,6 +189,7 @@ export default function LiveRFQDashboard() {
   const [testEmailImage, setTestEmailImage]     = useState(null); // { data, mimeType, dataUrl }
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [testUploadLoading, setTestUploadLoading] = useState(false);
+  const [uploadQueue, setUploadQueue]           = useState([]); // [{ id, name, status, error }]
   const fileInputRef = useRef(null);
 
   // Real mailbox (Gmail / Outlook)
@@ -612,39 +613,55 @@ export default function LiveRFQDashboard() {
     }
   }, [isRunning, mailToken, manualMode, pollInterval, pollGmail]);
 
-  // ─── File upload handler ───────────────────────────────────────────
-  const handleFileUpload = useCallback(async (file) => {
-    setUploadedFileName(file.name);
+  // ─── File upload handler (supports multiple .eml via queue) ──────────
+  const handleFileUpload = useCallback(async (files) => {
+    const fileList = Array.from(files instanceof FileList ? files : [files]);
+    if (!fileList.length) return;
+    const entries = fileList.map(f => ({ id: `${f.name}-${Date.now()}-${Math.random()}`, name: f.name, status: 'pending', error: null }));
+    setUploadQueue(entries);
     setTestEmailImage(null);
-    setTestUploadLoading(true);
-    try {
-      const ext = file.name.split('.').pop().toLowerCase();
-      if (ext === 'eml') {
-        const text   = await file.text();
-        const parsed = parseEml(text);
-        setTestEmail(parsed.text || text);
-      } else if (ext === 'pdf') {
-        const text = await extractPdfText(file);
-        setTestEmail(text);
-      } else if (file.type.startsWith('image/')) {
-        await new Promise(resolve => {
-          const reader = new FileReader();
-          reader.onload = e => {
-            const dataUrl = e.target.result;
-            const base64  = dataUrl.split(',')[1];
-            setTestEmailImage({ data: base64, mimeType: file.type, dataUrl });
-            setTestEmail('');
-            resolve();
-          };
-          reader.readAsDataURL(file);
-        });
-      } else {
-        setTestEmail(await file.text());
+    setUploadedFileName('');
+
+    for (let i = 0; i < fileList.length; i++) {
+      const file    = fileList[i];
+      const entryId = entries[i].id;
+      setUploadQueue(q => q.map(e => e.id === entryId ? { ...e, status: 'processing' } : e));
+      setTestUploadLoading(true);
+      try {
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (ext === 'eml') {
+          const text   = await file.text();
+          const parsed = parseEml(text);
+          setTestEmail(parsed.text || text);
+          setUploadedFileName(file.name);
+        } else if (ext === 'pdf') {
+          const text = await extractPdfText(file);
+          setTestEmail(text);
+          setUploadedFileName(file.name);
+        } else if (file.type.startsWith('image/')) {
+          await new Promise(resolve => {
+            const reader = new FileReader();
+            reader.onload = e => {
+              const dataUrl = e.target.result;
+              const base64  = dataUrl.split(',')[1];
+              setTestEmailImage({ data: base64, mimeType: file.type, dataUrl });
+              setTestEmail('');
+              setUploadedFileName(file.name);
+              resolve();
+            };
+            reader.readAsDataURL(file);
+          });
+        } else {
+          setTestEmail(await file.text());
+          setUploadedFileName(file.name);
+        }
+        setUploadQueue(q => q.map(e => e.id === entryId ? { ...e, status: 'done' } : e));
+      } catch (err) {
+        addLog(`❌ File read error (${file.name}): ${err.message}`, 'error');
+        setUploadQueue(q => q.map(e => e.id === entryId ? { ...e, status: 'error', error: err.message } : e));
+      } finally {
+        setTestUploadLoading(false);
       }
-    } catch (err) {
-      addLog(`❌ File read error: ${err.message}`, 'error');
-    } finally {
-      setTestUploadLoading(false);
     }
   }, [addLog]);
 
@@ -1291,7 +1308,7 @@ export default function LiveRFQDashboard() {
               </div>
 
               {/* Table body */}
-              <div style={{ maxHeight: 360, overflowY: "auto" }}>
+              <div style={{ overflowY: "auto" }}>
                 {filteredRfqs.length === 0 ? (
                   <div style={{
                     padding: "60px 20px", textAlign: "center", color: "var(--text3)",
@@ -1328,8 +1345,8 @@ export default function LiveRFQDashboard() {
                       const isSelected = selectedRfq?.id === rfq.id;
                       const isChecked  = !!checkedRfqIds[rfq.id];
                       return (
+                    <div key={rfq.id}>
                     <div
-                      key={rfq.id}
                       onClick={() => setSelectedRfq(isSelected ? null : rfq)}
                       style={{
                         display: "grid",
@@ -1464,6 +1481,157 @@ export default function LiveRFQDashboard() {
                         >×</button>
                       </div>
                     </div>
+                    {/* ── Inline detail panel ── */}
+                    {selectedRfq?.id === rfq.id && (() => {
+                      const sr = rfqs.find(r => r.id === rfq.id) || rfq;
+                      const responses  = sr.supplierResponses || [];
+                      const bestScore  = responses.length ? Math.max(...responses.map(r => r.score ?? 0)) : null;
+                      const scoreColor = (s) => s >= 70 ? "var(--green)" : s >= 40 ? "var(--amber)" : "var(--red)";
+                      return (
+                        <div style={{
+                          margin: "0 8px 8px 8px",
+                          background: "var(--surface)",
+                          border: `1px solid ${sr.isObsolete ? "#FB923C40" : "var(--accent)30"}`,
+                          borderRadius: 10, padding: 18,
+                          animation: "slideIn 0.2s ease",
+                        }}>
+                          {/* Header */}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                            <div>
+                              <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 2 }}>
+                                {sr.id} · {sr.sender}{sr.fromEmail && ` · ${sr.fromEmail}`}
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <span style={{ fontSize: 17, fontWeight: 700, direction: "ltr", color: "var(--accent)" }}>{sr.partNumber}</span>
+                                {sr.isObsolete && <span style={{ fontSize: 9, fontWeight: 800, padding: "2px 7px", borderRadius: 4, background: "#FB923C25", color: "#FB923C", border: "1px solid #FB923C50" }}>OBSOLETE</span>}
+                                {sr.humanLoop && <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 4, background: "#38BDF820", color: "var(--accent)", border: "1px solid #38BDF840" }}>🔍 HUMAN REVIEW</span>}
+                              </div>
+                            </div>
+                            <button onClick={() => setSelectedRfq(null)} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                              <XIcon size={16} color="var(--text3)" />
+                            </button>
+                          </div>
+                          {/* Fields grid */}
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 10 }}>
+                            {[
+                              { l: "1. Customer",      v: sr.customerName,              c: "var(--text)" },
+                              { l: "2. Part Number",   v: sr.partNumber,                c: "var(--accent)", ltr: true },
+                              { l: "3. Quantity",      v: sr.quantity?.toLocaleString(),c: "var(--text)" },
+                              { l: "4. Delivery Date", v: sr.deliveryDate || "⚠ Not specified", c: sr.deliveryDate ? "var(--text)" : "var(--red)" },
+                            ].map((f, fi) => (
+                              <div key={fi} style={{ background: "var(--surface2)", borderRadius: 8, padding: "9px 11px" }}>
+                                <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 3, fontWeight: 600 }}>{f.l}</div>
+                                <div style={{ fontSize: 11, fontWeight: 600, color: f.c, direction: f.ltr ? "ltr" : "rtl", textAlign: f.ltr ? "left" : "right" }}>{f.v}</div>
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 10 }}>
+                            <div style={{ background: "var(--surface2)", borderRadius: 8, padding: "9px 11px" }}>
+                              <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 3, fontWeight: 600 }}>5. Accepts Alternatives?</div>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: sr.acceptsAlternatives === "Yes" ? "var(--green)" : sr.acceptsAlternatives === "No" ? "var(--red)" : "var(--text3)" }}>
+                                {sr.acceptsAlternatives === "Yes" ? "✓ Yes" : sr.acceptsAlternatives === "No" ? "✗ No" : "— Not specified"}
+                              </div>
+                            </div>
+                            <div style={{ background: "var(--surface2)", borderRadius: 8, padding: "9px 11px" }}>
+                              <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 3, fontWeight: 600 }}>6. Target Price</div>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: sr.targetPrice != null ? "var(--green)" : "var(--text3)", direction: "ltr", textAlign: "left" }}>
+                                {sr.targetPrice != null ? `$${sr.targetPrice}` : "—"}
+                              </div>
+                            </div>
+                            <div style={{ background: "var(--surface2)", borderRadius: 8, padding: "9px 11px" }}>
+                              <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 3, fontWeight: 600 }}>Priority</div>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: sr.priority === "high" ? "var(--red)" : sr.priority === "medium" ? "var(--amber)" : "var(--green)" }}>
+                                {sr.priority === "high" ? "🔴 High" : sr.priority === "medium" ? "🟡 Medium" : "🟢 Low"}
+                              </div>
+                            </div>
+                          </div>
+                          {sr.specialRequirements && (
+                            <div style={{ background: "#FBBF2408", borderRadius: 8, padding: "10px 14px", fontSize: 11, color: "var(--amber)", borderRight: "3px solid var(--amber)", marginBottom: 10 }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text3)", display: "block", marginBottom: 3 }}>7. Special Requirements</span>
+                              {sr.specialRequirements}
+                            </div>
+                          )}
+                          {sr.summary && (
+                            <div style={{ fontSize: 11, color: "var(--text3)", fontStyle: "italic", paddingBottom: 10 }}>AI Summary: {sr.summary}</div>
+                          )}
+                          {/* Supplier responses */}
+                          {responses.length > 0 && (
+                            <div style={{ marginBottom: 12 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text2)", marginBottom: 6 }}>
+                                📊 Supplier Responses ({responses.length}) · Best: <span style={{ color: scoreColor(bestScore) }}>{bestScore}/100</span>
+                              </div>
+                              <div style={{ overflowX: "auto" }}>
+                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10, direction: "ltr" }}>
+                                  <thead>
+                                    <tr style={{ background: "var(--surface2)", color: "var(--text3)", fontSize: 9, textTransform: "uppercase" }}>
+                                      {["Supplier","Unit Price","Lead Time","Avail Qty","MOQ","Score","Notes"].map(h => (
+                                        <th key={h} style={{ padding: "5px 8px", textAlign: "left", fontWeight: 600, whiteSpace: "nowrap" }}>{h}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {responses.map((resp, ri) => {
+                                      const isBest = resp.score === bestScore && bestScore != null;
+                                      return (
+                                        <tr key={ri} style={{ background: isBest ? "#34D39910" : "transparent", borderBottom: "1px solid var(--border)", borderRight: isBest ? "3px solid var(--green)" : "none" }}>
+                                          <td style={{ padding: "5px 8px", fontWeight: 600, color: "var(--text)" }}>{isBest && <span style={{ color: "var(--green)" }}>★ </span>}{resp.supplierName || "—"}</td>
+                                          <td style={{ padding: "5px 8px", color: resp.quotedPrice != null ? "var(--green)" : "var(--text3)" }}>{resp.quotedPrice != null ? `$${resp.quotedPrice}` : "—"}{resp.currency && resp.currency !== "USD" && <span style={{ fontSize: 8, color: "var(--text3)", marginLeft: 3 }}>{resp.currency}</span>}</td>
+                                          <td style={{ padding: "5px 8px", color: resp.leadTimeDays === 0 ? "var(--green)" : "var(--text2)" }}>{resp.leadTimeDays === 0 ? "In Stock" : resp.leadTimeDays != null ? `${resp.leadTimeDays}d` : "—"}</td>
+                                          <td style={{ padding: "5px 8px", color: "var(--text2)" }}>{resp.availableQty != null ? resp.availableQty.toLocaleString() : resp.inStock ? "✓ Stock" : "—"}</td>
+                                          <td style={{ padding: "5px 8px", color: "var(--text3)" }}>{resp.moq != null ? resp.moq.toLocaleString() : "—"}</td>
+                                          <td style={{ padding: "5px 8px" }}><span style={{ fontWeight: 700, color: scoreColor(resp.score ?? 0), background: `${scoreColor(resp.score ?? 0)}15`, padding: "2px 6px", borderRadius: 4 }}>{resp.score ?? "—"}</span></td>
+                                          <td style={{ padding: "5px 8px", fontSize: 9, color: "var(--text3)", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{resp.notes || "—"}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+                          {/* Status history */}
+                          {(sr.statusHistory || []).length > 0 && (
+                            <div style={{ marginBottom: 12 }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text3)", marginBottom: 5, textTransform: "uppercase" }}>Status History</div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                                {sr.statusHistory.map((h, hi) => (
+                                  <div key={hi} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10, color: "var(--text2)", background: "var(--surface2)", borderRadius: 6, padding: "5px 10px" }}>
+                                    <span style={{ fontSize: 9, color: "var(--text3)", minWidth: 55 }}>{h.ts}</span>
+                                    <span style={{ color: STATUS[h.from]?.color }}>{STATUS[h.from]?.label || h.from}</span>
+                                    <span style={{ color: "var(--text3)" }}>→</span>
+                                    <span style={{ color: STATUS[h.to]?.color }}>{STATUS[h.to]?.label || h.to}</span>
+                                    <span style={{ color: "var(--text3)" }}>·</span>
+                                    <span style={{ fontStyle: "italic", color: "var(--text3)" }}>{h.comment}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {/* Actions */}
+                          <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            {sr.status !== 'completed' && (
+                              <button onClick={() => advanceStatus(sr.id)} style={{ padding: "8px 18px", borderRadius: 8, background: "var(--accent)", color: "#000", border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>Advance ▸</button>
+                            )}
+                            {sr.status !== 'new' && (
+                              <button onClick={() => { setBackModal({ rfqId: sr.id }); setBackComment(''); }} style={{ padding: "8px 14px", borderRadius: 8, background: "var(--surface2)", color: "var(--text2)", border: "1px solid var(--border)", cursor: "pointer", fontSize: 11 }}>◂ Back</button>
+                            )}
+                            <button
+                              onClick={() => sendToSuppliers(sr)}
+                              disabled={sendingSuppliers || !mailToken || !supplierList.length}
+                              title={!mailToken ? "Connect your mailbox first" : !supplierList.length ? "Add suppliers in Settings" : sr.humanLoop ? "Remove review flag first" : "Send to all suppliers"}
+                              style={{ padding: "8px 16px", borderRadius: 8, fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", background: (sendingSuppliers || !mailToken || !supplierList.length) ? "var(--surface3)" : sr.humanLoop ? "#FBBF2420" : "#F472B620", color: (sendingSuppliers || !mailToken || !supplierList.length) ? "var(--text3)" : sr.humanLoop ? "var(--amber)" : "var(--pink)", border: `1px solid ${sr.humanLoop ? "#FBBF2440" : "#F472B640"}` }}
+                            >
+                              <SendIcon size={12} />{sendingSuppliers ? "Sending…" : `Send to Suppliers (${supplierList.length})`}
+                            </button>
+                            <button onClick={() => toggleHumanLoop(sr.id)} style={{ padding: "8px 12px", borderRadius: 8, fontSize: 11, cursor: "pointer", background: sr.humanLoop ? "#38BDF820" : "var(--surface2)", color: sr.humanLoop ? "var(--accent)" : "var(--text3)", border: `1px solid ${sr.humanLoop ? "#38BDF840" : "var(--border)"}` }}>
+                              {sr.humanLoop ? "🔍 Remove Review" : "🔍 Flag for Review"}
+                            </button>
+                            <button onClick={() => { const text = `Customer: ${sr.customerName}\nPart: ${sr.partNumber}\nQty: ${sr.quantity}\nDelivery: ${sr.deliveryDate || "—"}\nAlts: ${sr.acceptsAlternatives}\nTarget: ${sr.targetPrice != null ? "$"+sr.targetPrice : "—"}\nReqs: ${sr.specialRequirements || "—"}`; navigator.clipboard?.writeText(text); addLog("📋 Copied", "success"); }} style={{ padding: "8px 14px", borderRadius: 8, background: "var(--surface2)", color: "var(--text2)", border: "1px solid var(--border)", cursor: "pointer", fontSize: 11 }}>📋 Copy</button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    </div>
                       );
                       })}
                     </div>
@@ -1472,9 +1640,9 @@ export default function LiveRFQDashboard() {
               </div>
             </div>
 
-            {/* Selected RFQ detail */}
-            {selectedRfq && (() => {
-              const sr = rfqs.find(r => r.id === selectedRfq.id) || selectedRfq;
+            {/* (detail panel is now rendered inline under each row) */}
+            {false && (() => {
+              const sr = null;
               const responses = sr.supplierResponses || [];
               const bestScore = responses.length ? Math.max(...responses.map(r => r.score ?? 0)) : null;
               const scoreColor = (s) => s >= 70 ? "var(--green)" : s >= 40 ? "var(--amber)" : "var(--red)";
@@ -2428,8 +2596,7 @@ export default function LiveRFQDashboard() {
               onDrop={async e => {
                 e.preventDefault();
                 e.currentTarget.style.borderColor = 'var(--border)';
-                const file = e.dataTransfer.files[0];
-                if (file) await handleFileUpload(file);
+                if (e.dataTransfer.files.length) await handleFileUpload(e.dataTransfer.files);
               }}
               onClick={() => fileInputRef.current?.click()}
               style={{
@@ -2441,17 +2608,52 @@ export default function LiveRFQDashboard() {
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 accept=".eml,.pdf,image/jpeg,image/png,image/webp,image/jpg"
                 style={{ display: 'none' }}
-                onChange={e => { if (e.target.files[0]) handleFileUpload(e.target.files[0]); e.target.value = ''; }}
+                onChange={e => { if (e.target.files.length) handleFileUpload(e.target.files); e.target.value = ''; }}
               />
               <div style={{ fontSize: 11, color: 'var(--text3)' }}>
                 {testUploadLoading
-                  ? '⏳ Extracting text…'
-                  : uploadedFileName
-                    ? <span>✅ <b>{uploadedFileName}</b> loaded &mdash; <span onClick={ev => { ev.stopPropagation(); setTestEmailImage(null); setUploadedFileName(''); setTestEmail(''); }} style={{ color: 'var(--red)', cursor: 'pointer', textDecoration: 'underline' }}>clear</span></span>
-                    : <>📎 Drop or click — <b>.eml</b>, <b>PDF</b>, or <b>image</b> (JPG / PNG / WEBP)</>}
+                  ? '⏳ Extracting…'
+                  : uploadQueue.length > 0
+                    ? <span>{uploadQueue.filter(e => e.status === 'done').length}/{uploadQueue.length} file{uploadQueue.length !== 1 ? 's' : ''} &mdash; <span onClick={ev => { ev.stopPropagation(); setUploadQueue([]); setTestEmailImage(null); setUploadedFileName(''); setTestEmail(''); }} style={{ color: 'var(--red)', cursor: 'pointer', textDecoration: 'underline' }}>clear</span></span>
+                    : <>📎 Drop or click — <b>.eml</b> (multiple), <b>PDF</b>, or <b>image</b></>}
               </div>
+              {/* Queue meter */}
+              {uploadQueue.length > 1 && (
+                <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 120, overflowY: 'auto' }}>
+                  {uploadQueue.map(entry => (
+                    <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10 }}>
+                      <span style={{ width: 14 }}>
+                        {entry.status === 'done'       ? '✅'
+                         : entry.status === 'processing' ? '⏳'
+                         : entry.status === 'error'     ? '❌'
+                         : '⏸'}
+                      </span>
+                      <span style={{ flex: 1, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.name}</span>
+                      {entry.status === 'processing' && (
+                        <div style={{ width: 60, height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', background: 'var(--accent)', animation: 'pulse 1s ease-in-out infinite', width: '60%' }} />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Total progress bar for multi-file */}
+              {uploadQueue.length > 1 && (() => {
+                const done = uploadQueue.filter(e => e.status === 'done' || e.status === 'error').length;
+                const pct  = Math.round((done / uploadQueue.length) * 100);
+                return (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ width: '100%', height: 5, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', transition: 'width 0.3s ease', borderRadius: 3 }} />
+                    </div>
+                    <div style={{ fontSize: 9, color: 'var(--text3)', textAlign: 'right', marginTop: 2 }}>{pct}%</div>
+                  </div>
+                );
+              })()}
               {testEmailImage && (
                 <img src={testEmailImage.dataUrl} alt="preview" style={{ maxHeight: 100, maxWidth: '100%', borderRadius: 6, marginTop: 8, objectFit: 'contain' }} />
               )}
@@ -2574,11 +2776,23 @@ Example:
                     }}
                   >
                     <option value="">— Select an RFQ to preview —</option>
-                    {rfqs.filter(r => r.partNumber).map(r => (
-                      <option key={r.id} value={r.id}>
-                        {r.partNumber} — {r.customerName}{r.isObsolete ? " [OBS]" : ""}
-                      </option>
-                    ))}
+                    {(() => {
+                      const grouped = new Map();
+                      rfqs.filter(r => r.partNumber).forEach(r => {
+                        const k = r.customerName || '—';
+                        if (!grouped.has(k)) grouped.set(k, []);
+                        grouped.get(k).push(r);
+                      });
+                      return [...grouped.entries()].map(([client, list]) => (
+                        <optgroup key={client} label={client}>
+                          {list.map(r => (
+                            <option key={r.id} value={r.id}>
+                              {r.partNumber}{r.isObsolete ? " [OBS]" : ""}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ));
+                    })()}
                   </select>
 
                   {/* Human-loop toggle for selected RFQ */}
