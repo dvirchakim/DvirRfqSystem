@@ -67,8 +67,8 @@ async function callOpenRouter({ apiKey, model, prompt, system, imageData, imageM
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${apiKey}`,
-      "HTTP-Referer": typeof window !== "undefined" ? window.location.origin : "app://rfq-rfq",
-      "X-Title": "rfq RFQ Dashboard",
+      "HTTP-Referer": typeof window !== "undefined" ? window.location.origin : "app://rfq-dashboard",
+      "X-Title": "RFQ Dashboard",
     },
     body: JSON.stringify({
       model: model || "anthropic/claude-3.5-sonnet",
@@ -202,7 +202,7 @@ export function scoreSupplierResponse(resp, rfq) {
 
 // ─── Prompts ─────────────────────────────────────────────────────────────────
 
-export const SUPPLIER_PARSE_PROMPT = `You are a supplier response parser for rfq Projects, an Israeli electronic components distributor.
+export const SUPPLIER_PARSE_PROMPT = `You are a supplier response parser for an electronic components distributor.
 Parse this supplier response email and extract pricing and availability. Respond ONLY in valid JSON (no markdown, no backticks, no extra text).
 
 {

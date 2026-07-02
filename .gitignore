@@ -10,8 +10,8 @@ example mails/
 dashboard-app/public/example-mails/
 dashboard-app/public/supplier-mails/
 suppliers response mails example/
-rfq-rfq-dashboard-deploy/
-rfq-rfq-dashboard-deploy.zip
+rfq-dashboard-deploy/
+rfq-dashboard-deploy.zip
 
 # Environment / secrets
 .env

@@ -1,11 +1,8 @@
-# rfq RFQ Dashboard
+# RFQ Dashboard
 
-An AI-powered procurement automation dashboard for **rfq Projects** — an Israeli electronic components distributor. Processes incoming RFQ emails, extracts structured data using Claude AI, manages supplier outreach, and tracks the full procurement pipeline.
+An AI-powered procurement automation dashboard for electronic components distributors. Processes incoming RFQ emails, extracts structured data using an LLM, manages supplier outreach, and tracks the full procurement pipeline.
 
 ---
-
-<img width="1868" height="563" alt="image" src="https://github.com/user-attachments/assets/fe859513-0294-43b4-a89a-7c4801a6b6c4" />
-
 
 
 ## Features
@@ -127,4 +124,6 @@ dashboard-app/
 
 ## License
 
-Private — rfq Projects internal tooling.
+MIT — see [LICENSE](LICENSE). This is a generic starting point; company name, prompts, and sample data should be adapted to your own organization before production use.
+
+> **Note:** this `agenticRfq` branch is an experimental extension (AI agent chat tab, PostgreSQL backend) on top of the main dashboard and hasn't had the same lint/test/CI hardening as `main` — see `main` for the actively maintained baseline.

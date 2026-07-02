@@ -34,7 +34,7 @@ export function exportToExcel(rfqs) {
 
   XLSX.utils.book_append_sheet(wb, ws, 'RFQs');
   const date = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `rfq-rfq-${date}.xlsx`);
+  XLSX.writeFile(wb, `rfq-export-${date}.xlsx`);
 }
 
 export function exportToPDF(rfqs) {
@@ -57,7 +57,7 @@ export function exportToPDF(rfqs) {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>rfq RFQ Report</title>
+  <title>RFQ Report</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:Arial,Helvetica,sans-serif;font-size:11px;padding:14px;color:#1a1a2e}
@@ -79,7 +79,7 @@ export function exportToPDF(rfqs) {
 <body>
   <div class="header">
     <div>
-      <div class="logo">rfq <span>RFQ</span> REPORT</div>
+      <div class="logo">RFQ <span>DASHBOARD</span> REPORT</div>
       <div class="meta">${rfqs.length} items · Generated: ${new Date().toLocaleString('en-GB')}</div>
     </div>
     <div class="meta">
@@ -95,7 +95,7 @@ export function exportToPDF(rfqs) {
     </thead>
     <tbody>${rows}</tbody>
   </table>
-  <div class="footer">rfq PROJECTS · Automated Procurement Pipeline · rfq-export-${new Date().toISOString().slice(0,10)}</div>
+  <div class="footer">RFQ Dashboard · Automated Procurement Pipeline · rfq-export-${new Date().toISOString().slice(0,10)}</div>
   <script>setTimeout(()=>window.print(),350)</script>
 </body>
 </html>`;

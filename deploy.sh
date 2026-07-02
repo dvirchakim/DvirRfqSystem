@@ -6,7 +6,7 @@ DIR="DvirRfqSystem/dashboard-app"
 PORT="${PORT:-8080}"
 
 echo ""
-echo "  🚀 rfq RFQ Dashboard — deploying..."
+echo "  🚀 RFQ Dashboard — deploying..."
 echo ""
 
 # Check Docker

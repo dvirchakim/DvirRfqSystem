@@ -10,33 +10,17 @@ import {
 } from "./mailProviders.js";
 
 // List of example .eml files served from public/example-mails/
+// This directory is gitignored — drop your own sample RFQ emails here for local testing
+// and list their filenames below (see docs/setup.md).
 const EXAMPLE_EMAILS = [
-  "rfq.eml",
-  "FW_Acme Corp -TPS61045DRBR.eml",
-  "FW_RH - HP -  IRFS4610TRLPBF - INFINEON -  RFQ.eml",
-  "FW_RH - TI - AD - RFQ.eml",
-  "FW_ 1555255LF.eml",
-  "FW_ רכיבי TI.eml",
-  "FW_ MT47H32M16NF-25E IT_H TR מק_ט יוניטרוניקס 104600809.eml",
-  "MT47H32M16NF-25E.eml",
-  "RE_ בקשה להצעת מחיר עבור.eml",
-  "RE_LIAT - Globex Ltd.eml",
+  // "rfq-sample-1.eml",
 ];
 
 // Supplier response example files served from public/supplier-mails/
+// This directory is gitignored — drop your own sample supplier reply emails here for local
+// testing and list their filenames below (see docs/setup.md).
 const SUPPLIER_MAIL_FILES = [
-  "FW_  BOM - 535 boards.eml",
-  "FW_  URGENT RFQ - STOCK   TI  .eml",
-  "FW_  URGENT RFQ 1 - STOCK N.eml",
-  "FW_ Momories - SKYHIGH - urgent!.eml",
-  "FW_ MTFDHBL064TDQ-1AT12ATYY.eml",
-  "FW_ URGENT BOM RFQ1.eml",
-  "FW_ URGENT RFQ - memory .eml",
-  "FW_ URGENT RFQ - STOCK .eml",
-  "FW_ URGENT RFQ 1 - STOCK .eml",
-  "FW_ URGENT RFQ 2 - STOCK _ Lead Time MICRON.eml",
-  "FW_ URGENT RFQ.eml",
-  "FW_ URGENT RFQ3 24.3.2026.eml",
+  // "supplier-reply-sample-1.eml",
 ];
 
 // ─── Icons (inline SVG to avoid import issues) ─────────────────────────
@@ -76,14 +60,14 @@ const STATUS = {
   error:       { label: "Error",       color: "#F87171", bg: "#F8717110" },
 };
 
-const PARSE_PROMPT = `You are an RFQ (Request for Quote) email parser for rfq Projects, an electronic components distributor in Israel.
+const PARSE_PROMPT = `You are an RFQ (Request for Quote) email parser for an electronic components distributor.
 You MUST extract exactly these 8 fields for each part requested. Respond ONLY in valid JSON (no markdown, no backticks, no extra text).
 
 {
   "parts": [
     {
-      "customerName": "string - שם לקוח / end customer name (e.g. Acme Corp, Contoso Semi, Acme Corp, Globex Ltd, HP). Look for company names in the email.",
-      "partNumber": "string - מק״ט יצרן / manufacturer part number (e.g. TPS61045DRBR, IRFS4610TRLPBF). This is the most important field.",
+      "customerName": "string - שם לקוח / end customer name (e.g. Acme Corp, Globex Ltd). Look for company names in the email.",
+      "partNumber": "string - מק״ט יצרן / manufacturer part number (e.g. LM358DR, TPS61045DRBR). This is the most important field.",
       "quantity": "number - כמות מבוקשת. Parse numbers like '10,000', '21600 י\"ח', '25K' correctly.",
       "deliveryDate": "string or null - תאריך אספקה מבוקש ע״י הלקוח. Look for dates like '05/04/2026', 'נדרש למאי', 'תוך 3 שבועות'. Return in DD/MM/YYYY format if possible, or the original Hebrew text.",
       "acceptsAlternatives": "string - Does the customer accept alternative parts? One of: 'Yes', 'No', 'Not specified'. Look for clues like 'תחליפי', 'חלופי', 'equivalent', 'alternative', 'cross reference'. If the part is marked obsolete, assume 'Not specified' unless explicitly stated.",
@@ -92,14 +76,14 @@ You MUST extract exactly these 8 fields for each part requested. Respond ONLY in
       "isObsolete": "boolean - true if the part is described as obsolete, discontinued, end-of-life, or no longer manufactured. Detect ALL of these variants (including typos and Hebrew): אובסולייט, אובסולייטית, אובסולט, אובסלט, אובסולת, obs, obsolete, obsolte, obslete, absolete, obsol., EOL, end-of-life, end of life, NRND, not recommended for new designs, PDN, product discontinuation notice, discontinued, last time buy, LTB, no longer manufactured, NLM, הופסק, אין יותר בייצור. Default false if none of these appear."
     }
   ],
-  "sender": "string - name of the rfq salesperson who forwarded the request",
+  "sender": "string - name of the salesperson who forwarded the request",
   "priority": "high|medium|low - high if: obsolete, urgent delivery, large qty (>5000), or military/defense customer. medium: standard. low: small qty, flexible timeline.",
   "summary": "string - one line English summary of the entire request"
 }
 
 IMPORTANT RULES:
 - If multiple parts are in one email, list ALL of them in the parts array.
-- For the customerName: look for company names after words like 'לקוח', 'מיועד ל', or in table headers like 'שם לקוח'. Common customers: Acme Corp, Contoso Semi, Wayne Optics Ltd, Globex Ltd, Acme Corp, Contoso Semi, Northwind Medical, HP, Globex Ltd.
+- For the customerName: look for company names after words like 'לקוח', 'מיועד ל', or in table headers like 'שם לקוח'.
 - For deliveryDate: look for 'ת. אספקה', 'נדרש ל', 'תאריך נדרש', or date columns in tables.
 - For acceptsAlternatives: default to 'Not specified' unless the email explicitly discusses alternatives.
 - For specialRequirements: combine ALL special notes — obsolete status, DC limits, lab reports, annual qty info, etc.
@@ -441,7 +425,7 @@ export default function LiveRFQDashboard() {
 <p>In order to process your request efficiently, we need the <strong>required delivery date</strong> for the following parts:</p>
 <ul>${partsList}</ul>
 <p>Could you please specify the required delivery date?</p>
-<p>Thank you,<br>Procurement Team — rfq Projects</p>
+<p>Thank you,<br>Procurement Team</p>
 </div>`;
           if (mailProvider === 'gmail') {
             await gmailSendMessage(mailToken, fromEmail, followSubject, followBody);
@@ -741,7 +725,7 @@ export default function LiveRFQDashboard() {
   ${reqRow}${obsRow}
 </table>
 <p style="margin-top:14px">Please provide: <b>unit price</b>, <b>lead time</b>, <b>available quantity</b>, <b>MOQ</b>, and any relevant date code or condition information.</p>
-<p>Best regards,<br><b>rfq Projects — Procurement Team</b></p>
+<p>Best regards,<br><b>Procurement Team</b></p>
 </div>`;
   }, []);
 
@@ -980,7 +964,7 @@ export default function LiveRFQDashboard() {
           }}>N</div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em" }}>
-              rfq <span style={{ color: "var(--accent)" }}>RFQ</span> LIVE
+              RFQ <span style={{ color: "var(--accent)" }}>DASHBOARD</span>
             </div>
             <div style={{ fontSize: 10, color: "var(--text3)", letterSpacing: "0.05em" }}>
               AUTOMATED PROCUREMENT PIPELINE
@@ -2689,14 +2673,14 @@ export default function LiveRFQDashboard() {
                 placeholder={`Paste an RFQ email here for testing...
 
 Example:
-היי לקוח
-דרישה לרכש
-כמות – 10000 יח
-רכיב: TPS61045DRBR
-יצרן: Texas Instruments
-לקוח: Acme Corp
-אין מחיר קניה / מטרה
-תודה`}
+Hi team
+Purchase request
+Quantity – 10000 pcs
+Part: LM358DR
+Manufacturer: Texas Instruments
+Customer: Acme Corp
+No target price
+Regards`}
                 style={{
                   width: "100%", minHeight: 200, padding: 16, borderRadius: 10,
                   background: "var(--surface2)", border: "1px solid var(--border)",
@@ -2743,10 +2727,10 @@ Example:
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {[
-                  { label: "TPS61045DRBR (Acme Corp)", text: "היי\n\nדרישה לכמות – 10000 י\"ח\nאין מחיר קניה / מטרה\nלבדיקתך ועדכונך\nלקוח: Acme Corp\nנדרש עד 15/06/2026\nלא מוכנים לתחליפי\n\nתודה\n\nTPS61045DRBR\nTexas Instruments" },
-                  { label: "IRFS4610 (Obsolete)", text: "בוקר טוב\n\nרכיב אובסולייט – מיועד לרכש\nכמות – 21600 י\"ח\nמחיר קניה אחרון – 0.78$\nלקוח: HP\nאספקה נדרשת: Q2 2026\nמוכנים לשקול חלופות\nדרישה מיוחדת: תאריך ייצור לא יותר מ-2 שנים\n\nתודה\n\nIRFS4610TRLPBF\nInfineon" },
-                  { label: "Micron SSD (Globex Ltd)", text: "היי\n\nדרישה לרכש\nכמות – 300 י\"ח\nמחיר קניה – 33$\nלקוח: Globex Ltd (Team)\nנדרש דוח מעבדת – GETS\nאספקה: מיידית\nלא מוכנים לתחליפי – מוצר צבאי\n\nMTFDHBL064TDQ-1AT12ATYY\nMicron\n\nתודה" },
-                  { label: "Multi-part (Acme Corp/KLA)", text: "היי לקוח\n\nמיועד לרכש\nלבדיקתך ועדכונך\n\nשם לקוח: Acme Corp BE LTD\nתאריך נדרש: 05/04/2026\nמק\"ט ספק: UCC28089D\nכמות: 225\nמחיר מטרה: 1.200$\nדרישות: אין\n\nשם לקוח: Contoso Semi\nתאריך נדרש: 05/04/2026\nמק\"ט ספק: AD8512ARZ-REEL\nכמות: 98\nמחיר מטרה: 3.980$\nמוכנים לתחליפי: כן\n\nשם לקוח: Wayne Optics Ltd LTD\nתאריך נדרש: 05/07/2026\nמק\"ט ספק: THS4504DGN\nכמות: 80\nמחיר מטרה: 4.398$\nדרישות: ROHS compliance\n\nתודה" },
+                  { label: "LM358DR (Standard)", text: "היי\n\nדרישה לכמות – 10000 י\"ח\nאין מחיר קניה / מטרה\nלבדיקתך ועדכונך\nלקוח: Acme Corp\nנדרש עד 15/06/2026\nלא מוכנים לתחליפי\n\nתודה\n\nLM358DR\nTexas Instruments" },
+                  { label: "IRFS4610 (Obsolete)", text: "בוקר טוב\n\nרכיב אובסולייט – מיועד לרכש\nכמות – 21600 י\"ח\nמחיר קניה אחרון – 0.78$\nלקוח: Globex Ltd\nאספקה נדרשת: Q2 2026\nמוכנים לשקול חלופות\nדרישה מיוחדת: תאריך ייצור לא יותר מ-2 שנים\n\nתודה\n\nIRFS4610TRLPBF\nInfineon" },
+                  { label: "Memory chip (Restricted)", text: "היי\n\nדרישה לרכש\nכמות – 300 י\"ח\nמחיר קניה – 33$\nלקוח: Falcon Defense Ltd\nנדרש דוח מעבדה\nאספקה: מיידית\nלא מוכנים לתחליפי – מוצר צבאי\n\nMT48LC4M16A2\nMicron\n\nתודה" },
+                  { label: "Multi-part (three customers)", text: "היי\n\nמיועד לרכש\nלבדיקתך ועדכונך\n\nשם לקוח: NORTHWIND MEDICAL LTD\nתאריך נדרש: 05/04/2026\nמק\"ט ספק: UCC28089D\nכמות: 225\nמחיר מטרה: 1.200$\nדרישות: אין\n\nשם לקוח: CONTOSO SEMI\nתאריך נדרש: 05/04/2026\nמק\"ט ספק: AD8512ARZ-REEL\nכמות: 98\nמחיר מטרה: 3.980$\nמוכנים לתחליפי: כן\n\nשם לקוח: WAYNE OPTICS LTD\nתאריך נדרש: 05/07/2026\nמק\"ט ספק: THS4504DGN\nכמות: 80\nמחיר מטרה: 4.398$\nדרישות: ROHS compliance\n\nתודה" },
                 ].map((tmpl, i) => (
                   <button
                     key={i}
@@ -2966,17 +2950,17 @@ Example:
                   placeholder={`Paste a supplier reply email here for analysis...
 
 Example:
-Dear rfq,
+Dear Sir/Madam,
 Thank you for your inquiry.
 We can offer the following:
-Part: TPS61045DRBR
+Part: LM358DR
 Price: $0.85/unit
 MOQ: 1000 pcs
 Lead time: 4-6 weeks
 Available qty: 25,000
 
 Best regards,
-ABC Electronics`}
+Example Components Ltd`}
                   style={{
                     width: "100%", minHeight: 150, padding: 14, borderRadius: 10,
                     background: "var(--surface2)", border: "1px solid var(--border)",

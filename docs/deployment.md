@@ -56,7 +56,7 @@ docker compose up -d
 
 ### Using the deploy zip
 
-If you have the `rfq-rfq-dashboard-deploy.zip` file:
+If you have a prebuilt `rfq-dashboard-deploy.zip` file:
 1. Go to Netlify → Sites → drag and drop the zip file
 
 ### Custom domain
