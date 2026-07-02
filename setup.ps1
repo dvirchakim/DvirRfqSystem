@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   RFQ Dashboard — Windows setup / update script.
@@ -7,7 +7,7 @@
   Run once for first-time setup. Re-run any time to update to the latest code.
 #>
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
 $PORT           = 8080
 $IMAGE_NAME     = "rfq-dashboard"
