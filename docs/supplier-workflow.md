@@ -70,11 +70,7 @@ Use this for RFQs where you want to double-check the AI extraction before commit
 
 ## 5. Automatic follow-up emails
 
-When the system processes a **real inbox email** (Gmail or Outlook poll — not a manual Test tab paste) and the extracted RFQ has **no delivery date**, it automatically sends a Hebrew follow-up to the original sender:
-
-> "שלום,  
-> בהמשך למייל שלך, אנא ציין את תאריך האספקה הנדרש עבור הרכיבים הבאים: [part list]  
-> תודה, rfq Projects"
+When the system processes a **real inbox email** (Gmail or Outlook poll — not a manual Test tab paste) and the extracted RFQ has **no delivery date**, it automatically sends a follow-up to the original sender asking for the required delivery date, listing the affected part numbers and customer names.
 
 This only fires when:
 - A real mailbox is connected (Gmail or Outlook)

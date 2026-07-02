@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  rfq RFQ Dashboard — Windows setup / update script.
+  RFQ Dashboard — Windows setup / update script.
   Installs Docker Desktop if needed, builds the container image, and starts the app.
 .NOTES
   Run once for first-time setup. Re-run any time to update to the latest code.
@@ -23,7 +23,7 @@ function Write-Fail { param($msg) Write-Host "`n[X] $msg`n" -ForegroundColor Red
 Clear-Host
 Write-Host ""
 Write-Host "  ╔════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "  ║    rfq RFQ Dashboard — Setup         ║" -ForegroundColor Cyan
+Write-Host "  ║    RFQ Dashboard — Setup         ║" -ForegroundColor Cyan
 Write-Host "  ╚════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 

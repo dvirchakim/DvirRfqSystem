@@ -18,7 +18,7 @@ The dashboard connects to Gmail using **Google Identity Services** (OAuth 2.0 in
 ### 1. Create a project
 
 1. Go to [console.cloud.google.com](https://console.cloud.google.com)
-2. Create a new project (e.g. **rfq RFQ**)
+2. Create a new project (e.g. **RFQ Dashboard**)
 
 ### 2. Enable the Gmail API
 
@@ -29,7 +29,7 @@ The dashboard connects to Gmail using **Google Identity Services** (OAuth 2.0 in
 
 1. Go to **APIs & Services → OAuth consent screen**
 2. Choose **External** (or Internal if your org uses Google Workspace)
-3. Fill in the app name (e.g. `rfq RFQ Dashboard`) and your email
+3. Fill in the app name (e.g. `RFQ Dashboard`) and your email
 4. Under **Scopes**, add:
    - `https://www.googleapis.com/auth/gmail.readonly`
    - `https://www.googleapis.com/auth/gmail.send`

@@ -19,7 +19,7 @@ The dashboard connects to Outlook / Microsoft 365 using **MSAL** (Microsoft Auth
 ### 1. Register an app
 
 1. Go to [portal.azure.com](https://portal.azure.com) → **Azure Active Directory → App registrations → New registration**
-2. Name: `rfq RFQ Dashboard`
+2. Name: `RFQ Dashboard`
 3. Supported account types: choose based on your org:
    - **Single tenant** — only your org's accounts (most secure for internal tools)
    - **Multitenant** — any Microsoft account

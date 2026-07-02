@@ -67,8 +67,8 @@ async function callOpenRouter({ apiKey, model, prompt, system, imageData, imageM
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${apiKey}`,
-      "HTTP-Referer": typeof window !== "undefined" ? window.location.origin : "app://rfq-rfq",
-      "X-Title": "rfq RFQ Dashboard",
+      "HTTP-Referer": typeof window !== "undefined" ? window.location.origin : "app://rfq-dashboard",
+      "X-Title": "RFQ Dashboard",
     },
     body: JSON.stringify({
       model: model || "anthropic/claude-3.5-sonnet",
@@ -158,15 +158,29 @@ export const OPENROUTER_MODELS = [
   { id: "nvidia/nemotron-3-super-120b-a12b:free", label: "NVIDIA Nemotron 3 Super 120B (FREE)" },
 ];
 
+// ─── Currency conversion ──────────────────────────────────────────────────────
+// Target prices are always extracted in USD (see PARSE_PROMPT), but supplier quotes can
+// come in EUR/ILS/etc. Approximate static fallback rates — pass `fxRates` (e.g. wired to a
+// Settings field) for anything more precise or current than these.
+export const DEFAULT_FX_TO_USD = { USD: 1, EUR: 1.08, ILS: 0.27 };
+
+function toUsd(amount, currency, fxRates) {
+  if (amount == null) return amount;
+  const table = fxRates || DEFAULT_FX_TO_USD;
+  const rate = table[(currency || 'USD').toUpperCase()];
+  return rate != null ? amount * rate : amount; // unknown currency code: assume already USD
+}
+
 // ─── Supplier response scoring ───────────────────────────────────────────────
 // Returns 0-100. Breakdown: price savings 40pts, lead time 40pts, availability 20pts.
-export function scoreSupplierResponse(resp, rfq) {
+export function scoreSupplierResponse(resp, rfq, fxRates) {
   let score = 0;
   const hasTarget = rfq?.targetPrice != null && rfq.targetPrice > 0;
+  const quotedPriceUsd = toUsd(resp.quotedPrice, resp.currency, fxRates);
 
   // Price savings (40 pts)
-  if (hasTarget && resp.quotedPrice != null) {
-    const savings = (rfq.targetPrice - resp.quotedPrice) / rfq.targetPrice;
+  if (hasTarget && quotedPriceUsd != null) {
+    const savings = (rfq.targetPrice - quotedPriceUsd) / rfq.targetPrice;
     if (savings >= 0.20)      score += 40;
     else if (savings >= 0.10) score += 30;
     else if (savings >= 0.00) score += 18;
@@ -200,25 +214,6 @@ export function scoreSupplierResponse(resp, rfq) {
   return Math.min(100, Math.round(score));
 }
 
-// ─── Prompts ─────────────────────────────────────────────────────────────────
-
-export const SUPPLIER_PARSE_PROMPT = `You are a supplier response parser for rfq Projects, an Israeli electronic components distributor.
-Parse this supplier response email and extract pricing and availability. Respond ONLY in valid JSON (no markdown, no backticks, no extra text).
-
-{
-  "supplierName": "string - company name of the supplier sending this email",
-  "partNumber": "string or null - part number mentioned in the response (helps match to RFQ)",
-  "quotedPrice": "number or null - unit price in USD. Parse from '$1.50', '1.500 USD', '0.78$'. Return just the number.",
-  "currency": "string - currency code: USD, EUR, ILS. Default USD.",
-  "leadTimeDays": "number or null - lead time in calendar days. Convert: '2 weeks'=14, '4-6 weeks'=35, 'in stock'/'ex stock'=0, 'ARO' = After Receipt of Order. Return midpoint for ranges.",
-  "availableQty": "number or null - stock / available quantity mentioned",
-  "moq": "number or null - minimum order quantity",
-  "inStock": "boolean - true if supplier explicitly states in stock / ex-stock / immediate availability",
-  "notes": "string or null - date codes, warranty, packaging, conditions, country of origin, any other relevant info"
-}
-
-RULES:
-- If multiple parts quoted, return data for the primary/first part.
-- quotedPrice is per unit, not total. If given in non-USD, note currency and still parse the number.
-- Never invent data. Use null if not mentioned.
-- leadTimeDays: if no lead time stated but inStock=true, use 0.`;
+// Re-exported for backwards compatibility — the canonical source is prompts.js, which also
+// holds PARSE_PROMPT (the inbound-RFQ prompt), so both prompts live in one place.
+export { SUPPLIER_PARSE_PROMPT } from './prompts.js';

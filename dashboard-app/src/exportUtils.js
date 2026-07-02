@@ -1,6 +1,14 @@
 // Export utilities: Excel (SheetJS) and PDF (print window)
 import * as XLSX from 'xlsx';
 
+// RFQ fields below originate from LLM-parsed, attacker-influenceable email content,
+// so they must be escaped before being interpolated into HTML (PDF export, print window).
+export function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
 const STATUS_COLORS = {
   new: '#38BDF8', processing: '#FBBF24', parsed: '#A78BFA',
   ready: '#34D399', distributed: '#F472B6', awaiting: '#FB923C',
@@ -34,22 +42,24 @@ export function exportToExcel(rfqs) {
 
   XLSX.utils.book_append_sheet(wb, ws, 'RFQs');
   const date = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `rfq-rfq-${date}.xlsx`);
+  XLSX.writeFile(wb, `rfq-export-${date}.xlsx`);
 }
 
 export function exportToPDF(rfqs) {
   const rows = rfqs.map(r => {
     const color = STATUS_COLORS[r.status] || '#888';
+    const specialReq = r.specialRequirements || '—';
+    const specialReqTruncated = specialReq.slice(0, 55) + (specialReq.length > 55 ? '…' : '');
     return `
       <tr style="${r.isObsolete ? 'background:#fff8e1' : ''}">
-        <td style="${r.priority === 'high' ? 'border-left:3px solid #ef4444' : ''}">${r.customerName}</td>
-        <td class="mono">${r.partNumber}${r.isObsolete ? ' <b style="color:#e65100;font-size:8px">OBS</b>' : ''}</td>
+        <td style="${r.priority === 'high' ? 'border-left:3px solid #ef4444' : ''}">${escapeHtml(r.customerName)}</td>
+        <td class="mono">${escapeHtml(r.partNumber)}${r.isObsolete ? ' <b style="color:#e65100;font-size:8px">OBS</b>' : ''}</td>
         <td class="center">${r.quantity?.toLocaleString() ?? ''}</td>
-        <td>${r.deliveryDate || '—'}</td>
-        <td class="center">${r.acceptsAlternatives}</td>
+        <td>${escapeHtml(r.deliveryDate) || '—'}</td>
+        <td class="center">${escapeHtml(r.acceptsAlternatives)}</td>
         <td class="mono">${r.targetPrice != null ? '$' + r.targetPrice : '—'}</td>
-        <td class="small">${(r.specialRequirements || '—').slice(0, 55)}${(r.specialRequirements?.length ?? 0) > 55 ? '…' : ''}</td>
-        <td><span style="background:${color}22;color:${color};padding:2px 7px;border-radius:3px;font-size:8px;font-weight:700">${r.status}</span></td>
+        <td class="small">${escapeHtml(specialReqTruncated)}</td>
+        <td><span style="background:${color}22;color:${color};padding:2px 7px;border-radius:3px;font-size:8px;font-weight:700">${escapeHtml(r.status)}</span></td>
       </tr>`;
   }).join('');
 
@@ -57,7 +67,7 @@ export function exportToPDF(rfqs) {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>rfq RFQ Report</title>
+  <title>RFQ Report</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:Arial,Helvetica,sans-serif;font-size:11px;padding:14px;color:#1a1a2e}
@@ -79,7 +89,7 @@ export function exportToPDF(rfqs) {
 <body>
   <div class="header">
     <div>
-      <div class="logo">rfq <span>RFQ</span> REPORT</div>
+      <div class="logo">RFQ <span>DASHBOARD</span> REPORT</div>
       <div class="meta">${rfqs.length} items · Generated: ${new Date().toLocaleString('en-GB')}</div>
     </div>
     <div class="meta">
@@ -95,7 +105,7 @@ export function exportToPDF(rfqs) {
     </thead>
     <tbody>${rows}</tbody>
   </table>
-  <div class="footer">rfq PROJECTS · Automated Procurement Pipeline · rfq-export-${new Date().toISOString().slice(0,10)}</div>
+  <div class="footer">RFQ Dashboard · Automated Procurement Pipeline · rfq-export-${new Date().toISOString().slice(0,10)}</div>
   <script>setTimeout(()=>window.print(),350)</script>
 </body>
 </html>`;
