@@ -41,10 +41,13 @@ GRANT SELECT ON rfqs                TO rfq_readonly;
 GRANT SELECT ON user_ui_preferences TO rfq_readonly;
 
 -- ── Agent database user (SELECT-only) ────────────────────────────
+-- No password is set here on purpose — the user cannot authenticate until
+-- init-agent-password.sh (run right after this script, see docker-compose.yml)
+-- sets it from the AGENT_DB_PASSWORD env var. Never hardcode a real password here.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'rfq_agent') THEN
-    CREATE USER rfq_agent WITH PASSWORD 'agent_changeme';
+    CREATE USER rfq_agent;
   END IF;
 END
 $$;

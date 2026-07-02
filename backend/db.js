@@ -9,28 +9,36 @@ export const rwPool = new Pool({
   connectionTimeoutMillis: 5_000,
 });
 
-// Read-only pool — uses rfq_agent when DATABASE_RO_URL is explicitly set,
-// otherwise falls back to the main rfq_user connection.
-// Application-level enforcement (SELECT-only) in executeReadonlySQL.js is the primary guard.
+// Read-only pool for the AI agent's SQL tool. Must point at a role with SELECT-only
+// grants (see schema.sql's rfq_agent role, password set via init-agent-password.sh).
+//
+// Deliberately fail closed: if DATABASE_RO_URL is missing, or the connection to it
+// fails, roPool stays null and roPoolError is set. executeReadonlySQL.js checks
+// roPoolError and refuses to run rather than silently falling back to the
+// read-write pool — a broken RO credential must never grant write access.
 const _roUrl = process.env.DATABASE_RO_URL;
-let _roPool = new Pool({
-  connectionString: _roUrl || process.env.DATABASE_URL,
-  max: 5,
-  idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 5_000,
-});
 
-// Probe the RO pool; fall back to rwPool if the credentials don't work
+export let roPool = null;
+export let roPoolError = 'DATABASE_RO_URL is not set — the agent SQL tool is disabled.';
+
 if (_roUrl) {
-  _roPool.connect()
+  const pool = new Pool({
+    connectionString: _roUrl,
+    max: 5,
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 5_000,
+  });
+  roPool = pool;
+  roPoolError = null;
+
+  pool.connect()
     .then(c => c.release())
-    .catch(() => {
-      console.warn('[db] roPool auth failed — falling back to rwPool for read-only queries');
-      _roPool = rwPool;
+    .catch(err => {
+      console.error('[db] roPool connection failed — agent SQL tool will refuse to run:', err.message);
+      roPoolError = `Read-only database connection failed: ${err.message}`;
+      roPool = null;
     });
 }
-
-export { _roPool as roPool };
 
 export async function testConnection() {
   const client = await rwPool.connect();

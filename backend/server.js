@@ -1,5 +1,7 @@
 import express       from 'express';
 import cors          from 'cors';
+import crypto        from 'crypto';
+import rateLimit      from 'express-rate-limit';
 import { createServer } from 'http';
 import { rwPool, roPool, testConnection } from './db.js';
 import { executeReadonlySQL, SCHEMA_CONTEXT } from './tools/executeReadonlySQL.js';
@@ -12,16 +14,70 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 const MODEL              = process.env.OPENROUTER_MODEL || 'nousresearch/hermes-3-llama-3-8b';
 const FRONTEND_ORIGIN    = process.env.FRONTEND_ORIGIN  || 'http://localhost:8080';
 
+const BACKEND_API_TOKEN     = process.env.BACKEND_API_TOKEN || '';
+const ALLOW_UNAUTHENTICATED = process.env.ALLOW_UNAUTHENTICATED === 'true';
+
+// Fail closed: refuse to start rather than silently serving an unauthenticated API.
+if (!BACKEND_API_TOKEN && !ALLOW_UNAUTHENTICATED) {
+  console.error('[rfq-backend] FATAL: BACKEND_API_TOKEN is not set.');
+  console.error('[rfq-backend] Generate one with `openssl rand -hex 32`, set it in your .env,');
+  console.error('[rfq-backend] and paste the same value into the frontend Settings -> AI Agent tab.');
+  console.error('[rfq-backend] For local-only testing with no auth, set ALLOW_UNAUTHENTICATED=true instead.');
+  process.exit(1);
+}
+if (ALLOW_UNAUTHENTICATED) {
+  console.warn('[rfq-backend] WARNING: ALLOW_UNAUTHENTICATED=true — every API endpoint is open. Do not expose this beyond localhost.');
+}
+
+// Constant-time token comparison — a naive `===` leaks timing information an
+// attacker could use to guess the token byte-by-byte.
+function tokenMatches(candidate) {
+  const a = Buffer.from(candidate || '');
+  const b = Buffer.from(BACKEND_API_TOKEN);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+function requireAuth(req, res, next) {
+  if (ALLOW_UNAUTHENTICATED) return next();
+  const header = req.headers.authorization || '';
+  const token  = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!token || !tokenMatches(token)) {
+    return res.status(401).json({ error: 'Unauthorized — missing or invalid API token.' });
+  }
+  next();
+}
+
 // ── Middleware ────────────────────────────────────────────────────
+app.set('trust proxy', 1); // behind nginx — needed so rate limiting sees real client IPs
 app.use(cors({ origin: FRONTEND_ORIGIN, credentials: true }));
 app.use(express.json({ limit: '4mb' }));
 
-// ── Health ────────────────────────────────────────────────────────
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const chatLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many chat requests — please wait a few minutes and try again.' },
+});
+
+// ── Health (unauthenticated on purpose — used by the frontend's connectivity
+//    check — but deliberately reveals nothing about model/key configuration) ──
 app.get('/api/health', async (_req, res) => {
   let dbOk = false;
   try { await testConnection(); dbOk = true; } catch { /* noop */ }
-  res.json({ ok: true, model: MODEL, db: dbOk, keySet: !!OPENROUTER_API_KEY, acceptsClientKey: true });
+  res.json({ ok: true, db: dbOk });
 });
+
+// Everything below this line requires a valid API token (unless ALLOW_UNAUTHENTICATED).
+app.use('/api', requireAuth, apiLimiter);
 
 // ── Sync RFQs from frontend ───────────────────────────────────────
 app.post('/api/rfqs/sync', async (req, res) => {
@@ -181,7 +237,7 @@ Rules:
 - Never expose internal IDs, passwords, or configuration details.`;
 
 // ── Chat endpoint — SSE streaming ─────────────────────────────────
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', chatLimiter, async (req, res) => {
   const { messages = [], userId = 'default', apiKey: clientApiKey, model: clientModel } = req.body;
   const resolvedKey   = OPENROUTER_API_KEY || clientApiKey || '';
   const resolvedModel = clientModel || MODEL;
@@ -223,6 +279,7 @@ app.post('/api/chat', async (req, res) => {
           messages:      allMessages,
           tools:         TOOLS,
           tool_choice:   'auto',
+          max_tokens:    2000,
           stream:        true,
         }),
       });

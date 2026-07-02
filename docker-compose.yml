@@ -8,9 +8,11 @@ services:
       POSTGRES_DB:       rfq_db
       POSTGRES_USER:     rfq_user
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      AGENT_DB_PASSWORD: ${AGENT_DB_PASSWORD:-agent_changeme_in_production}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./backend/init-agent-password.sh:/docker-entrypoint-initdb.d/02_set_agent_password.sh
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rfq_user -d rfq_db"]
       interval: 5s
@@ -25,11 +27,14 @@ services:
       dockerfile: Dockerfile
     container_name: rfq-backend
     environment:
-      PORT:               "3001"
-      DATABASE_URL:       postgresql://rfq_user:${POSTGRES_PASSWORD:-changeme}@postgres:5432/rfq_db
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
-      OPENROUTER_MODEL:   ${OPENROUTER_MODEL:-nousresearch/hermes-3-llama-3-8b}
-      FRONTEND_ORIGIN:    http://localhost:${PORT:-8080}
+      PORT:                  "3001"
+      DATABASE_URL:          postgresql://rfq_user:${POSTGRES_PASSWORD:-changeme}@postgres:5432/rfq_db
+      DATABASE_RO_URL:       postgresql://rfq_agent:${AGENT_DB_PASSWORD:-agent_changeme_in_production}@postgres:5432/rfq_db
+      OPENROUTER_API_KEY:    ${OPENROUTER_API_KEY}
+      OPENROUTER_MODEL:      ${OPENROUTER_MODEL:-nousresearch/hermes-3-llama-3-8b}
+      FRONTEND_ORIGIN:       http://localhost:${PORT:-8080}
+      BACKEND_API_TOKEN:     ${BACKEND_API_TOKEN}
+      ALLOW_UNAUTHENTICATED: ${ALLOW_UNAUTHENTICATED:-false}
     depends_on:
       postgres:
         condition: service_healthy

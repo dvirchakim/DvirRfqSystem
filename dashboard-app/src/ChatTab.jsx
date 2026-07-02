@@ -172,7 +172,7 @@ function MessageBubble({ msg }) {
 }
 
 // ── Main ChatTab component ────────────────────────────────────────
-export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
+export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate, backendApiToken = '' }) {
   const [messages,       setMessages]       = useState([]);
   const [input,          setInput]          = useState('');
   const [streaming,      setStreaming]      = useState(false);
@@ -189,12 +189,15 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
 
   const getOrKey   = () => localStorage.getItem('rfq-openrouter-key')   || '';
   const getOrModel  = () => localStorage.getItem('rfq-openrouter-model') || 'nousresearch/hermes-3-llama-3-8b';
+  // /api/health is intentionally unauthenticated (see server.js); every other
+  // backend route requires this. Must match the backend's BACKEND_API_TOKEN.
+  const authHeaders = () => backendApiToken ? { Authorization: `Bearer ${backendApiToken}` } : {};
 
   // Check backend health on mount
   useEffect(() => {
     fetch(`${API}/health`)
       .then(r => r.json())
-      .then(d => setBackendOk(d.ok && (d.keySet || d.acceptsClientKey)))
+      .then(d => setBackendOk(d.ok))
       .catch(() => setBackendOk(false));
   }, []);
 
@@ -203,14 +206,14 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
     if (!rfqs.length) return;
     fetch(`${API}/rfqs/sync`, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body:    JSON.stringify({ rfqs }),
     }).catch(() => {});
-  }, [rfqs]);
+  }, [rfqs, backendApiToken]);
 
   // Load user layout on mount
   useEffect(() => {
-    fetch(`${API}/user/${encodeURIComponent(userId)}/layout`)
+    fetch(`${API}/user/${encodeURIComponent(userId)}/layout`, { headers: authHeaders() })
       .then(r => r.json())
       .then(d => {
         if (d.components?.length) {
@@ -219,7 +222,7 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
         }
       })
       .catch(() => {});
-  }, [userId]);
+  }, [userId, backendApiToken]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -259,7 +262,7 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
     try {
       const res = await fetch(`${API}/chat`, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         signal:  abort.signal,
         body:    JSON.stringify({
           messages: historyRef.current.slice(-20),
@@ -345,7 +348,7 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate }) {
         return updated;
       });
     }
-  }, [input, streaming, userId, applyLayout, currentConvId]);
+  }, [input, streaming, userId, applyLayout, currentConvId, backendApiToken]);
 
   const stop = useCallback(() => { abortRef.current?.abort(); }, []);
 

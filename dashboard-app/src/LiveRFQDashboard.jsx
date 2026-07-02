@@ -169,6 +169,8 @@ export default function LiveRFQDashboard() {
   const [ollamaModel, setOllamaModel] = useState(() => lsGet('rfq-ollama-model', 'llama3.1'));
   const [openrouterApiKey, setOpenrouterApiKey] = useState(() => lsGet('rfq-openrouter-key'));
   const [openrouterModel, setOpenrouterModel] = useState(() => lsGet('rfq-openrouter-model', 'anthropic/claude-3.5-sonnet'));
+  // Must match the backend's BACKEND_API_TOKEN env var — see docs and env.example.txt.
+  const [backendApiToken, setBackendApiToken] = useState(() => lsGet('rfq-backend-api-token'));
   const [manualMode, setManualMode] = useState(() => lsGet('rfq-manual-mode', 'false') === 'true');
   const [selectedExample, setSelectedExample] = useState('');
   const [collapsedClients, setCollapsedClients] = useState(new Set());
@@ -232,12 +234,13 @@ export default function LiveRFQDashboard() {
     localStorage.setItem('rfq-ollama-model', ollamaModel || '');
     localStorage.setItem('rfq-openrouter-key', openrouterApiKey || '');
     localStorage.setItem('rfq-openrouter-model', openrouterModel || '');
+    localStorage.setItem('rfq-backend-api-token', backendApiToken || '');
     localStorage.setItem('rfq-manual-mode', manualMode ? 'true' : 'false');
     localStorage.setItem('rfq-google-client-id', googleClientId || '');
     localStorage.setItem('rfq-ms-client-id', msClientId || '');
     localStorage.setItem('rfq-ms-tenant-id', msTenantId || '');
     localStorage.setItem('rfq-mail-provider', mailProvider || 'gmail');
-  }, [provider, anthropicApiKey, anthropicModel, openaiApiKey, openaiBaseUrl, openaiModel, ollamaBaseUrl, ollamaModel, openrouterApiKey, openrouterModel, manualMode, googleClientId, msClientId, msTenantId, mailProvider]);
+  }, [provider, anthropicApiKey, anthropicModel, openaiApiKey, openaiBaseUrl, openaiModel, ollamaBaseUrl, ollamaModel, openrouterApiKey, openrouterModel, backendApiToken, manualMode, googleClientId, msClientId, msTenantId, mailProvider]);
 
   // Persist RFQ list to localStorage whenever it changes
   useEffect(() => {
@@ -2305,6 +2308,35 @@ export default function LiveRFQDashboard() {
               </div>
             </div>
 
+            {/* AI Agent backend token */}
+            <div style={{
+              background: "var(--surface)", border: "1px solid var(--border)",
+              borderRadius: 12, padding: 20, marginBottom: 16,
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
+                🤖 AI Agent
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 14, lineHeight: 1.7 }}>
+                The AI Agent tab talks to the backend server (SQL + dashboard-layout tools). The backend
+                requires an API token — this must match the <code>BACKEND_API_TOKEN</code> value set in the
+                backend's environment (see <code>env.example.txt</code>). Without a match, every request is
+                rejected with 401.
+              </div>
+              <div style={{ fontSize: 10, color: "var(--text2)" }}>Backend API Token</div>
+              <input
+                type="password"
+                value={backendApiToken}
+                onChange={e => setBackendApiToken(e.target.value)}
+                placeholder="paste the same value as BACKEND_API_TOKEN on the backend"
+                style={{
+                  padding: "10px 14px", borderRadius: 8, marginTop: 6,
+                  background: "var(--surface2)", border: "1px solid var(--border)",
+                  color: "var(--text)", fontSize: 12, outline: "none",
+                  direction: "ltr", fontFamily: "monospace", width: "100%",
+                }}
+              />
+            </div>
+
             {/* Info: real mailbox connection happens in Inbox tab */}
             <div style={{
               background: "var(--surface)", border: "1px solid var(--border)",
@@ -3099,6 +3131,7 @@ Example Components Ltd`}
             rfqs={rfqs}
             userId={googleClientId || msClientId || "default"}
             onLayoutUpdate={layout => setAgentLayout(layout)}
+            backendApiToken={backendApiToken}
           />
         )}
 
