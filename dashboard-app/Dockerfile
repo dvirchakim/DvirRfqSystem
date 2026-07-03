@@ -11,6 +11,12 @@ RUN --mount=type=cache,target=/root/.npm \
 
 # Copy source and build
 COPY . .
+# Bakes the shared backend API token into the built bundle at build time (Vite
+# exposes any VITE_-prefixed env var to import.meta.env automatically) — so the
+# AI Agent authenticates to the backend with no manual setup step. See
+# docker-compose.yml, which passes BACKEND_API_TOKEN through as this build arg.
+ARG VITE_BACKEND_API_TOKEN=""
+ENV VITE_BACKEND_API_TOKEN=$VITE_BACKEND_API_TOKEN
 RUN npm run build
 
 # ---------- Stage 2: serve ----------

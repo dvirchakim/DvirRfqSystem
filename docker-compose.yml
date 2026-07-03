@@ -45,6 +45,10 @@ services:
     build:
       context: ./dashboard-app
       dockerfile: Dockerfile
+      args:
+        # Same token the backend requires — baked into the bundle so the AI
+        # Agent authenticates automatically, no manual Settings step needed.
+        VITE_BACKEND_API_TOKEN: ${BACKEND_API_TOKEN}
     container_name: rfq-dashboard
     ports:
       - "${PORT:-8080}:80"

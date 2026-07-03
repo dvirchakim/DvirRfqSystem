@@ -45,11 +45,11 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 `setup.ps1` will:
 1. Install **Docker Desktop** automatically (via `winget`) if it isn't already installed
-2. Build the container image from `dashboard-app/Dockerfile`
-3. Start the container on port **8080**
+2. Generate a `.env` with fresh, random secrets on first run (never overwritten on re-runs)
+3. Build and start the full stack — dashboard + AI-agent backend + PostgreSQL — with `docker compose`
 4. Open `http://localhost:8080` in your browser
 
-Re-run `setup.ps1` any time you pull new code — it rebuilds and restarts the container.
+Re-run `setup.ps1` any time you pull new code — it rebuilds and restarts the stack, and never overwrites your existing `.env`.
 
 > **Requirement:** Docker Desktop must be running before the build step. The script will attempt to start it automatically.
 
@@ -58,16 +58,27 @@ Re-run `setup.ps1` any time you pull new code — it rebuilds and restarts the c
 ### Linux / macOS — clone and run
 
 ```bash
-git clone https://github.com/dvirchakim/DvirRfqSystem.git
-cd DvirRfqSystem/dashboard-app
-docker compose up -d --build
+curl -fsSL https://raw.githubusercontent.com/dvirchakim/DvirRfqSystem/main/deploy.sh | bash
 ```
 
-Opens at **http://localhost:8080**.
+Or manually:
+
+```bash
+git clone https://github.com/dvirchakim/DvirRfqSystem.git
+cd DvirRfqSystem
+docker compose up -d --build   # deploy.sh (above) generates .env with random secrets first;
+                                # doing it manually, copy env.example.txt to .env yourself first
+```
+
+Opens at **http://localhost:8080**. The compose file runs all three services (frontend, backend, PostgreSQL) from the repo root — run compose from the root, not from `dashboard-app/`.
+
+> The **AI Agent** connects automatically — no token to paste, no separate LLM key to set up. It authenticates to the backend with a token baked into the build at `docker compose` time, and it reuses whichever LLM provider you've already configured in **Settings** (Anthropic / OpenAI-compatible / Ollama / OpenRouter) for RFQ parsing. The dashboard itself works with none of this if you skip Docker entirely.
 
 ---
 
-### Local dev (no Docker)
+### Just the dashboard (no AI agent, no Docker)
+
+The RFQ dashboard runs fully in the browser and needs no backend:
 
 ```bash
 cd dashboard-app
@@ -75,7 +86,7 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:5173**
+Open **http://localhost:5173**. The AI Agent tab will show but stay disconnected until you run the backend (via `docker compose`).
 
 ---
 
@@ -106,9 +117,14 @@ Open **http://localhost:5173**
 ## Project Structure
 
 ```
-dashboard-app/
+docker-compose.yml             # Full stack: frontend + backend + PostgreSQL
+env.example.txt                # Copy to .env and fill in secrets
+dashboard-app/                 # React frontend (dashboard + AI Agent tab)
 ├── src/
-│   ├── LiveRFQDashboard.jsx   # Main app (dashboard, pipeline, config, test, logs)
+│   ├── LiveRFQDashboard.jsx   # Main app (dashboard, pipeline, config, test, AI agent)
+│   ├── ChatTab.jsx            # AI Agent chat UI (SSE streaming, live layout preview)
+│   ├── layoutEngine.jsx       # Renders the agent-composed widget layout
+│   ├── widgets/               # Agent-composable widgets (stats, charts, metrics, tables…)
 │   ├── llmClient.js           # Multi-provider LLM client + supplier scoring + FX conversion
 │   ├── mailProviders.js       # Gmail + Outlook API integrations
 │   ├── exportUtils.js         # Excel + PDF export + escapeHtml
@@ -118,12 +134,14 @@ dashboard-app/
 │   ├── constants.js           # Pipeline status metadata
 │   ├── icons.jsx              # Inline SVG icon set
 │   └── *.test.js              # Vitest unit tests
-├── public/
-│   ├── example-mails/         # Sample RFQ emails for testing (not committed)
-│   └── supplier-mails/        # Sample supplier response emails (not committed)
 ├── Dockerfile
-├── docker-compose.yml
-└── nginx.conf
+└── nginx.conf                 # Serves the SPA, proxies /api to the backend
+backend/                       # AI-agent backend (Node + Express + PostgreSQL)
+├── server.js                  # Auth, rate limiting, SSE chat, agent tool calls
+├── widgetSchema.js            # Single source of truth for the agent's UI vocabulary
+├── tools/                     # execute_readonly_sql, validateLayout (+ tests)
+├── db.js · schema.sql         # Read-write + read-only (SELECT-only) DB roles
+└── init-agent-password.sh     # Sets the read-only role's password from AGENT_DB_PASSWORD
 ```
 
 ---
@@ -150,7 +168,8 @@ Security properties worth knowing before you deploy:
 
 - **API keys in the browser.** LLM keys (Anthropic / OpenAI-compatible / OpenRouter) and mail OAuth client IDs are stored in **`localStorage` in plaintext**. Anyone with access to the browser profile (or an XSS vector) can read them. Don't deploy on a shared/public machine, and never commit real keys.
 - **RFQ content is untrusted.** It comes from inbound email and is parsed by an LLM; all downstream HTML rendering (PDF export, supplier email preview, agent-authored cards) escapes extracted fields to prevent injection. Keep that discipline for any new UI that renders RFQ fields.
-- **The agent backend requires a token.** It refuses to start without `BACKEND_API_TOKEN` set (or `ALLOW_UNAUTHENTICATED=true` for local-only use), and every `/api` route except health requires that Bearer token. Set it in `.env` and paste the same value into Settings → AI Agent. See `env.example.txt`.
+- **The agent backend requires a token, but you don't configure it.** It refuses to start without `BACKEND_API_TOKEN` set (or `ALLOW_UNAUTHENTICATED=true` for local-only use), and every `/api` route except health requires that Bearer token. `setup.ps1`/`deploy.sh` generate it randomly into `.env`, and `docker-compose.yml` bakes the same value into the frontend build (`VITE_BACKEND_API_TOKEN`) — there's nothing to paste. It's only visible client-side (baked into the JS bundle), so it stops arbitrary internet traffic from hitting the API, not a determined user of the app itself; treat it as a deployment-boundary control, not a per-user secret.
+- **The agent reuses your existing LLM provider** — whichever one you configured in Settings for RFQ parsing (Anthropic / OpenAI-compatible / Ollama / OpenRouter) is what the agent calls; there's no separate agent-only key. An optional `OPENROUTER_API_KEY` in `.env` exists only if a deployer wants to provide a shared fallback key.
 - **The agent's SQL access is read-only, enforced three ways:** a dedicated `rfq_agent` Postgres role with SELECT-only grants, a `READ ONLY` transaction with a statement timeout, and an app-level statement/keyword filter. The agent's UI changes are declarative — it composes a fixed, schema-validated set of widgets and can never execute arbitrary code.
 - For a hardened production deployment, also put the LLM/mail calls behind the backend so provider keys never reach the browser at all.
 

@@ -172,7 +172,31 @@ function MessageBubble({ msg }) {
 }
 
 // ── Main ChatTab component ────────────────────────────────────────
-export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate, onAction, backendApiToken = '' }) {
+const DEFAULT_LLM_CONFIG = { provider: 'openrouter' };
+
+// Same provider config shape LiveRFQDashboard already builds for RFQ parsing —
+// the agent reuses it verbatim, so there is nothing separate to configure.
+function providerModel(llmConfig) {
+  switch (llmConfig.provider) {
+    case 'anthropic': return llmConfig.anthropicModel || 'claude-sonnet-4-6';
+    case 'openai':    return llmConfig.openaiModel || 'gpt-4o-mini';
+    case 'ollama':     return llmConfig.ollamaModel || 'llama3.1';
+    default:           return llmConfig.openrouterModel || 'nousresearch/hermes-3-llama-3-8b';
+  }
+}
+function providerHasKey(llmConfig) {
+  switch (llmConfig.provider) {
+    case 'anthropic': return !!llmConfig.anthropicApiKey;
+    case 'openai':    return !!llmConfig.openaiBaseUrl;
+    case 'ollama':     return !!llmConfig.ollamaBaseUrl;
+    default:           return !!llmConfig.openrouterApiKey;
+  }
+}
+
+export function ChatTab({
+  rfqs = [], userId = 'default', onLayoutUpdate, onAction, backendApiToken = '',
+  llmConfig = DEFAULT_LLM_CONFIG, providerReady = false,
+}) {
   const [messages,       setMessages]       = useState([]);
   const [input,          setInput]          = useState('');
   const [streaming,      setStreaming]      = useState(false);
@@ -187,8 +211,6 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate, onActio
   const historyRef = useRef([]);
   const abortRef   = useRef(null);
 
-  const getOrKey   = () => localStorage.getItem('rfq-openrouter-key')   || '';
-  const getOrModel  = () => localStorage.getItem('rfq-openrouter-model') || 'nousresearch/hermes-3-llama-3-8b';
   // /api/health is intentionally unauthenticated (see server.js); every other
   // backend route requires this. Must match the backend's BACKEND_API_TOKEN.
   const authHeaders = useCallback(
@@ -270,8 +292,7 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate, onActio
         body:    JSON.stringify({
           messages: historyRef.current.slice(-20),
           userId,
-          apiKey: getOrKey(),
-          model:  getOrModel(),
+          ...llmConfig, // same provider/keys/models already configured for RFQ parsing
         }),
       });
 
@@ -351,7 +372,7 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate, onActio
         return updated;
       });
     }
-  }, [input, streaming, userId, applyLayout, currentConvId, authHeaders]);
+  }, [input, streaming, userId, applyLayout, currentConvId, authHeaders, llmConfig]);
 
   const stop = useCallback(() => { abortRef.current?.abort(); }, []);
 
@@ -471,9 +492,11 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate, onActio
             <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--accent)' }}>🤖 AI Agent</h2>
             <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>
               {backendOk === null  && '⧏ Checking backend…'}
-              {backendOk === true  && `✅ Connected · ${getOrModel()}`}
+              {backendOk === true  && `✅ Connected · ${llmConfig.provider} · ${providerModel(llmConfig)}`}
               {backendOk === false && '⚠ Backend unreachable — is docker-compose running?'}
-              {backendOk === true  && !getOrKey() && <span style={{ color: 'var(--amber)', marginLeft: 6 }}>⚠ Add OpenRouter key in Settings → OpenRouter tab first</span>}
+              {backendOk === true  && !providerReady && !providerHasKey(llmConfig) && (
+                <span style={{ color: 'var(--amber)', marginLeft: 6 }}>⚠ Configure an LLM provider in Settings first — the agent reuses it automatically</span>
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>

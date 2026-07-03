@@ -78,8 +78,13 @@ export default function LiveRFQDashboard() {
   const [ollamaModel, setOllamaModel] = useState(() => lsGet('rfq-ollama-model', 'llama3.1'));
   const [openrouterApiKey, setOpenrouterApiKey] = useState(() => lsGet('rfq-openrouter-key'));
   const [openrouterModel, setOpenrouterModel] = useState(() => lsGet('rfq-openrouter-model', 'anthropic/claude-3.5-sonnet'));
-  // Must match the backend's BACKEND_API_TOKEN env var — see docs and env.example.txt.
-  const [backendApiToken, setBackendApiToken] = useState(() => lsGet('rfq-backend-api-token'));
+  // Baked into the build automatically from the backend's BACKEND_API_TOKEN (see
+  // docker-compose.yml's frontend build arg) — normally nothing to configure here.
+  // The Settings field only matters if you're overriding it (e.g. frontend and
+  // backend deployed separately, not built together via docker-compose).
+  const [backendApiToken, setBackendApiToken] = useState(
+    () => lsGet('rfq-backend-api-token') || import.meta.env.VITE_BACKEND_API_TOKEN || ''
+  );
   const [manualMode, setManualMode] = useState(() => lsGet('rfq-manual-mode', 'false') === 'true');
   const [selectedExample, setSelectedExample] = useState('');
   const [collapsedClients, setCollapsedClients] = useState(new Set());
@@ -1984,7 +1989,7 @@ export default function LiveRFQDashboard() {
               </div>
             </div>
 
-            {/* AI Agent backend token */}
+            {/* AI Agent */}
             <div style={{
               background: "var(--surface)", border: "1px solid var(--border)",
               borderRadius: 12, padding: 20, marginBottom: 16,
@@ -1993,17 +1998,18 @@ export default function LiveRFQDashboard() {
                 🤖 AI Agent
               </div>
               <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 14, lineHeight: 1.7 }}>
-                The AI Agent tab talks to the backend server (SQL + dashboard-layout tools). The backend
-                requires an API token — this must match the <code>BACKEND_API_TOKEN</code> value set in the
-                backend&apos;s environment (see <code>env.example.txt</code>). Without a match, every request is
-                rejected with 401.
+                The AI Agent tab (SQL + dashboard-layout tools) connects to the backend automatically —
+                its access token is baked in at build time by <code>docker compose</code>, nothing to set up here.
+                It also reuses whichever LLM provider is configured above ({provider}); no separate agent key is needed.
               </div>
-              <div style={{ fontSize: 10, color: "var(--text2)" }}>Backend API Token</div>
+              <div style={{ fontSize: 10, color: "var(--text2)" }}>
+                Backend API Token <span style={{ color: "var(--text3)" }}>(auto-filled from the build; only change this if the frontend and backend are deployed separately)</span>
+              </div>
               <input
                 type="password"
                 value={backendApiToken}
                 onChange={e => setBackendApiToken(e.target.value)}
-                placeholder="paste the same value as BACKEND_API_TOKEN on the backend"
+                placeholder="paste a token here if not using the automatic build-time value"
                 style={{
                   padding: "10px 14px", borderRadius: 8, marginTop: 6,
                   background: "var(--surface2)", border: "1px solid var(--border)",
@@ -2852,6 +2858,8 @@ Example Components Ltd`}
             onLayoutUpdate={layout => setAgentLayout(layout)}
             onAction={agentAction}
             backendApiToken={backendApiToken}
+            llmConfig={llmConfig}
+            providerReady={providerReady}
           />
         )}
 
