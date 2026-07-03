@@ -1,9 +1,10 @@
 # RFQ Dashboard
 
-An AI-powered procurement automation dashboard for electronic components distributors. Processes incoming RFQ emails, extracts structured data using an LLM, manages supplier outreach, and tracks the full procurement pipeline.
+[![CI](https://github.com/dvirchakim/DvirRfqSystem/actions/workflows/ci.yml/badge.svg)](https://github.com/dvirchakim/DvirRfqSystem/actions/workflows/ci.yml)
+
+An AI-powered procurement automation dashboard for electronic components distributors. Processes incoming RFQ emails, extracts structured data using an LLM, manages supplier outreach, and tracks the full procurement pipeline. Includes an **embedded AI agent** that can answer questions about your live RFQ data and reshape the dashboard on request. Built for a Hebrew/English bilingual workflow but the parsing prompts and UI are all in English and easy to adapt to any market.
 
 ---
-
 
 ## Features
 
@@ -108,10 +109,15 @@ Open **http://localhost:5173**
 dashboard-app/
 ├── src/
 │   ├── LiveRFQDashboard.jsx   # Main app (dashboard, pipeline, config, test, logs)
-│   ├── llmClient.js           # Multi-provider LLM client + supplier scoring
+│   ├── llmClient.js           # Multi-provider LLM client + supplier scoring + FX conversion
 │   ├── mailProviders.js       # Gmail + Outlook API integrations
-│   ├── exportUtils.js         # Excel + PDF export
-│   └── emlParser.js           # .eml file parser (quoted-printable, base64, Hebrew)
+│   ├── exportUtils.js         # Excel + PDF export + escapeHtml
+│   ├── emailTemplates.js      # Outbound HTML email builders (supplier RFQ, follow-up)
+│   ├── emlParser.js           # .eml file parser (quoted-printable, base64, Hebrew)
+│   ├── prompts.js             # LLM prompts (inbound RFQ parsing, supplier response parsing)
+│   ├── constants.js           # Pipeline status metadata
+│   ├── icons.jsx              # Inline SVG icon set
+│   └── *.test.js              # Vitest unit tests
 ├── public/
 │   ├── example-mails/         # Sample RFQ emails for testing (not committed)
 │   └── supplier-mails/        # Sample supplier response emails (not committed)
@@ -122,8 +128,32 @@ dashboard-app/
 
 ---
 
+## Development
+
+```bash
+cd dashboard-app
+npm install
+npm run lint     # ESLint
+npm run test     # Vitest unit tests
+npm run build    # Production build
+```
+
+CI runs lint, tests, and build on every push/PR to `main` (see [.github/workflows/ci.yml](.github/workflows/ci.yml)).
+
+---
+
+## Architecture & Security notes
+
+The **dashboard** (RFQ pipeline, parsing, supplier outreach) runs entirely in the browser — no backend is required for it, and RFQ data / API keys never leave your browser except for direct calls to the LLM and mail providers you configure. The optional **AI Agent** adds a small Node + PostgreSQL backend (`backend/`, wired up by `docker-compose.yml`) that the agent uses to query RFQ data and reshape the dashboard.
+
+Security properties worth knowing before you deploy:
+
+- **API keys in the browser.** LLM keys (Anthropic / OpenAI-compatible / OpenRouter) and mail OAuth client IDs are stored in **`localStorage` in plaintext**. Anyone with access to the browser profile (or an XSS vector) can read them. Don't deploy on a shared/public machine, and never commit real keys.
+- **RFQ content is untrusted.** It comes from inbound email and is parsed by an LLM; all downstream HTML rendering (PDF export, supplier email preview, agent-authored cards) escapes extracted fields to prevent injection. Keep that discipline for any new UI that renders RFQ fields.
+- **The agent backend requires a token.** It refuses to start without `BACKEND_API_TOKEN` set (or `ALLOW_UNAUTHENTICATED=true` for local-only use), and every `/api` route except health requires that Bearer token. Set it in `.env` and paste the same value into Settings → AI Agent. See `env.example.txt`.
+- **The agent's SQL access is read-only, enforced three ways:** a dedicated `rfq_agent` Postgres role with SELECT-only grants, a `READ ONLY` transaction with a statement timeout, and an app-level statement/keyword filter. The agent's UI changes are declarative — it composes a fixed, schema-validated set of widgets and can never execute arbitrary code.
+- For a hardened production deployment, also put the LLM/mail calls behind the backend so provider keys never reach the browser at all.
+
 ## License
 
 MIT — see [LICENSE](LICENSE). This is a generic starting point; company name, prompts, and sample data should be adapted to your own organization before production use.
-
-> **Note:** this `agenticRfq` branch is an experimental extension (AI agent chat tab, PostgreSQL backend) on top of the main dashboard and hasn't had the same lint/test/CI hardening as `main` — see `main` for the actively maintained baseline.

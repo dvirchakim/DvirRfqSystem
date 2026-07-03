@@ -259,7 +259,7 @@ export async function outlookSendMessage(token, to, subject, htmlBody) {
   }
 }
 
-export async function outlookSignOut(clientId, tenantId) {
+export async function outlookSignOut() {
   if (!msalInstance) return;
   const account = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
   if (account) {

@@ -2,13 +2,21 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ChatTab } from "./ChatTab.jsx";
 import { LayoutEngine } from "./layoutEngine.jsx";
 import { parseEml } from "./emlParser.js";
-import { callLLM, PROVIDERS, OPENROUTER_MODELS, SUPPLIER_PARSE_PROMPT, scoreSupplierResponse } from "./llmClient.js";
+import { callLLM, PROVIDERS, OPENROUTER_MODELS, SUPPLIER_PARSE_PROMPT, scoreSupplierResponse, DEFAULT_FX_TO_USD } from "./llmClient.js";
 import { exportToExcel, exportToPDF } from "./exportUtils.js";
 import {
   gmailSignIn, gmailListMessages, gmailFetchRaw, gmailSendMessage,
   outlookSignIn, acquireOutlookToken, outlookListMessages, outlookFetchMessage,
   outlookSendMessage, outlookSignOut, initOutlook, clearOutlookCache,
 } from "./mailProviders.js";
+import { PARSE_PROMPT } from "./prompts.js";
+import { buildSupplierEmail, buildFollowUpEmail } from "./emailTemplates.js";
+import { STATUS } from "./constants.js";
+import {
+  RefreshIcon, ZapIcon, CheckIcon, ClockIcon, AlertIcon, SendIcon, XIcon,
+  SearchIcon, BoxIcon, PlayIcon, PauseIcon, InboxIcon, SunIcon, MoonIcon,
+  SettingsIcon, DownloadIcon, UsersIcon,
+} from "./icons.jsx";
 
 // List of example .eml files served from public/example-mails/
 // This directory is gitignored — drop your own sample RFQ emails here for local testing
@@ -23,105 +31,6 @@ const EXAMPLE_EMAILS = [
 const SUPPLIER_MAIL_FILES = [
   // "supplier-reply-sample-1.eml",
 ];
-
-// ─── Icons (inline SVG to avoid import issues) ─────────────────────────
-const Icon = ({ d, size = 18, color = "currentColor", ...props }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...props}>{d}</svg>
-);
-const MailIcon = (p) => <Icon {...p} d={<><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></>} />;
-const RefreshIcon = (p) => <Icon {...p} d={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></>} />;
-const ZapIcon = (p) => <Icon {...p} d={<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>} />;
-const CheckIcon = (p) => <Icon {...p} d={<><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>} />;
-const ClockIcon = (p) => <Icon {...p} d={<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>} />;
-const AlertIcon = (p) => <Icon {...p} d={<><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>} />;
-const SendIcon = (p) => <Icon {...p} d={<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>} />;
-const XIcon = (p) => <Icon {...p} d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} />;
-const ChevronRight = (p) => <Icon {...p} d={<polyline points="9 18 15 12 9 6"/>} />;
-const SearchIcon = (p) => <Icon {...p} d={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>} />;
-const BoxIcon = (p) => <Icon {...p} d={<><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></>} />;
-const PlayIcon = (p) => <Icon {...p} d={<polygon points="5 3 19 12 5 21 5 3"/>} />;
-const PauseIcon = (p) => <Icon {...p} d={<><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></>} />;
-const InboxIcon = (p) => <Icon {...p} d={<><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></>} />;
-const SunIcon = (p) => <Icon {...p} d={<><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></>} />;
-const MoonIcon = (p) => <Icon {...p} d={<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>} />;
-const SettingsIcon = (p) => <Icon {...p} d={<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></>} />;
-const DownloadIcon = (p) => <Icon {...p} d={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>} />;
-const UsersIcon   = (p) => <Icon {...p} d={<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>} />;
-const EyeIcon     = (p) => <Icon {...p} d={<><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>} />;
-
-// ─── Constants ──────────────────────────────────────────────────────────
-const STATUS = {
-  new:         { label: "New",         color: "#38BDF8", bg: "#38BDF810" },
-  processing:  { label: "Processing",  color: "#FBBF24", bg: "#FBBF2410" },
-  parsed:      { label: "Parsed",      color: "#A78BFA", bg: "#A78BFA10" },
-  ready:       { label: "Ready",       color: "#34D399", bg: "#34D39910" },
-  distributed: { label: "Distributed", color: "#F472B6", bg: "#F472B610" },
-  awaiting:    { label: "Awaiting",    color: "#FB923C", bg: "#FB923C10" },
-  completed:   { label: "Done",        color: "#4ADE80", bg: "#4ADE8010" },
-  error:       { label: "Error",       color: "#F87171", bg: "#F8717110" },
-};
-
-const PARSE_PROMPT = `You are an RFQ (Request for Quote) email parser for an electronic components distributor.
-You MUST extract exactly these 8 fields for each part requested. Respond ONLY in valid JSON (no markdown, no backticks, no extra text).
-
-{
-  "parts": [
-    {
-      "customerName": "string - שם לקוח / end customer name (e.g. Acme Corp, Globex Ltd). Look for company names in the email.",
-      "partNumber": "string - מק״ט יצרן / manufacturer part number (e.g. LM358DR, TPS61045DRBR). This is the most important field.",
-      "quantity": "number - כמות מבוקשת. Parse numbers like '10,000', '21600 י\"ח', '25K' correctly.",
-      "deliveryDate": "string or null - תאריך אספקה מבוקש ע״י הלקוח. Look for dates like '05/04/2026', 'נדרש למאי', 'תוך 3 שבועות'. Return in DD/MM/YYYY format if possible, or the original Hebrew text.",
-      "acceptsAlternatives": "string - Does the customer accept alternative parts? One of: 'Yes', 'No', 'Not specified'. Look for clues like 'תחליפי', 'חלופי', 'equivalent', 'alternative', 'cross reference'. If the part is marked obsolete, assume 'Not specified' unless explicitly stated.",
-      "targetPrice": "number or null - מחיר מטרה בדולר. Parse from formats like '1.200', '0.78$', '$33', '8.80$ t/p'. Return just the number or null if not mentioned.",
-      "specialRequirements": "string or null - דרישות מיוחדות. Include: obsolete status, date code limits (e.g. 'DC עד 3 שנים'), lab reports needed (e.g. 'דוח מעבדת GETS'), certifications, specific packaging, annual quantities, or any other special notes.",
-      "isObsolete": "boolean - true if the part is described as obsolete, discontinued, end-of-life, or no longer manufactured. Detect ALL of these variants (including typos and Hebrew): אובסולייט, אובסולייטית, אובסולט, אובסלט, אובסולת, obs, obsolete, obsolte, obslete, absolete, obsol., EOL, end-of-life, end of life, NRND, not recommended for new designs, PDN, product discontinuation notice, discontinued, last time buy, LTB, no longer manufactured, NLM, הופסק, אין יותר בייצור. Default false if none of these appear."
-    }
-  ],
-  "sender": "string - name of the salesperson who forwarded the request",
-  "priority": "high|medium|low - high if: obsolete, urgent delivery, large qty (>5000), or military/defense customer. medium: standard. low: small qty, flexible timeline.",
-  "summary": "string - one line English summary of the entire request"
-}
-
-IMPORTANT RULES:
-- If multiple parts are in one email, list ALL of them in the parts array.
-- For the customerName: look for company names after words like 'לקוח', 'מיועד ל', or in table headers like 'שם לקוח'.
-- For deliveryDate: look for 'ת. אספקה', 'נדרש ל', 'תאריך נדרש', or date columns in tables.
-- For acceptsAlternatives: default to 'Not specified' unless the email explicitly discusses alternatives.
-- For specialRequirements: combine ALL special notes — obsolete status, DC limits, lab reports, annual qty info, etc.
-- For isObsolete: when in doubt lean toward true — a false negative (missing an obsolete flag) is worse than a false positive.
-- Never invent data. If a field is genuinely not in the email, use null or 'Not specified' as appropriate.`;
-
-// ─── Gmail search via MCP in Claude API ─────────────────────────────────
-async function searchGmail(query) {
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1000,
-        messages: [{ role: "user", content: `Search my Gmail for emails matching: "${query}". Return the subject, sender, date, and a snippet of the body for each result. Format as JSON array.` }],
-        mcp_servers: [{
-          type: "url",
-          url: "https://gmailmcp.googleapis.com/mcp/v1",
-          name: "gmail"
-        }],
-      }),
-    });
-    const data = await res.json();
-    // Extract tool results
-    const toolResults = (data.content || [])
-      .filter(b => b.type === "mcp_tool_result")
-      .map(b => b.content?.[0]?.text || "");
-    const textResults = (data.content || [])
-      .filter(b => b.type === "text")
-      .map(b => b.text || "");
-    return { toolResults, textResults, raw: data.content };
-  } catch (e) {
-    console.error("Gmail search error:", e);
-    return null;
-  }
-}
 
 // ─── PDF text extraction (pdfjs-dist, lazy-loaded) ─────────────────────────
 async function extractPdfText(file) {
@@ -141,7 +50,6 @@ async function extractPdfText(file) {
 // ─── Main Dashboard ─────────────────────────────────────────────────────
 export default function LiveRFQDashboard() {
   const [isRunning, setIsRunning] = useState(false);
-  const [gmailConnected, setGmailConnected] = useState(false);
   const [pollInterval, setPollInterval] = useState(60);
   const [searchQuery, setSearchQuery] = useState("subject:(RFQ OR הצעת מחיר OR rfq) newer_than:7d");
   const [rfqs, setRfqs] = useState(() => {
@@ -209,6 +117,17 @@ export default function LiveRFQDashboard() {
   const [newSupplierName, setNewSupplierName] = useState('');
   const [newSupplierEmail, setNewSupplierEmail] = useState('');
   const [sendingSuppliers, setSendingSuppliers] = useState(false);
+
+  // ── FX rates for supplier price scoring (persisted) ─────────────────────
+  const [fxRates, setFxRates] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('rfq-fx-rates') || 'null');
+      return saved ? { ...DEFAULT_FX_TO_USD, ...saved } : { ...DEFAULT_FX_TO_USD };
+    } catch { return { ...DEFAULT_FX_TO_USD }; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('rfq-fx-rates', JSON.stringify(fxRates)); } catch {}
+  }, [fxRates]);
 
   // ── Dashboard filters ───────────────────────────────────────────────────
   const [showObsoleteOnly, setShowObsoleteOnly] = useState(false);
@@ -334,7 +253,7 @@ export default function LiveRFQDashboard() {
 
     // Extract sender address and subject for follow-up emails
     const fromMatch = emailText.match(
-      /^From:\s*(?:[^<\n]*<)?([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})>?/im
+      /^From:\s*(?:[^<\n]*<)?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/im
     );
     const fromEmail = fromMatch ? fromMatch[1].trim() : null;
     const subjectMatch = emailText.match(/^Subject:\s*(.+)$/im);
@@ -417,20 +336,10 @@ export default function LiveRFQDashboard() {
       const missingDate  = newRfqs.filter(r => !r.deliveryDate);
       if (isRealInbox && mailToken && fromEmail && missingDate.length > 0) {
         try {
-          const partsList = missingDate
-            .map(r => `<li><b>${r.partNumber}</b> — ${r.customerName}</li>`)
-            .join('');
           const followSubject = originalSubject
             ? `Re: ${originalSubject} — Delivery date required`
             : 'Delivery date required for your RFQ';
-          const followBody = `<div style="font-family:Arial,sans-serif;font-size:13px">
-<p>Hello,</p>
-<p>Thank you for your request for quotation.</p>
-<p>In order to process your request efficiently, we need the <strong>required delivery date</strong> for the following parts:</p>
-<ul>${partsList}</ul>
-<p>Could you please specify the required delivery date?</p>
-<p>Thank you,<br>Procurement Team</p>
-</div>`;
+          const followBody = buildFollowUpEmail(missingDate);
           if (mailProvider === 'gmail') {
             await gmailSendMessage(mailToken, fromEmail, followSubject, followBody);
           } else {
@@ -529,7 +438,7 @@ export default function LiveRFQDashboard() {
     } catch (e) {
       addLog(`❌ Processing failed: ${e.message}`, "error");
     }
-  }, [mailProvider, mailToken, msClientId, processEmail, providerReady, addLog]);
+  }, [mailProvider, mailToken, msClientId, msTenantId, processEmail, providerReady, addLog]);
 
   const disconnectMailbox = useCallback(async () => {
     try {
@@ -728,30 +637,6 @@ export default function LiveRFQDashboard() {
     ));
   }, []);
 
-  // ─── Build outgoing supplier email HTML ───────────────────────────
-  const buildSupplierEmail = useCallback((rfq) => {
-    const obsRow = rfq.isObsolete
-      ? `<tr><th style="color:#e65100">Note</th><td style="color:#e65100"><b>OBSOLETE PART</b> — please confirm date code and country of origin</td></tr>`
-      : '';
-    const reqRow = rfq.specialRequirements
-      ? `<tr><th>Special Requirements</th><td>${rfq.specialRequirements}</td></tr>`
-      : '';
-    return `<div dir="ltr" style="font-family:Arial,sans-serif;font-size:13px;color:#1a1a2e">
-<p>Dear Supplier,</p>
-<p>We are requesting a quote for the following component on behalf of one of our customers:</p>
-<table border="1" cellpadding="7" cellspacing="0" style="border-collapse:collapse;min-width:380px">
-  <tr><th style="background:#f4f6fa;text-align:left;width:160px">Part Number</th><td><b style="font-family:monospace">${rfq.partNumber}</b></td></tr>
-  <tr><th style="background:#f4f6fa;text-align:left">Quantity</th><td>${rfq.quantity?.toLocaleString()} pcs</td></tr>
-  <tr><th style="background:#f4f6fa;text-align:left">Required Delivery</th><td>${rfq.deliveryDate || 'ASAP — please advise lead time'}</td></tr>
-  <tr><th style="background:#f4f6fa;text-align:left">Target Price</th><td>${rfq.targetPrice != null ? '$' + rfq.targetPrice + ' / unit' : 'Open — please quote best price'}</td></tr>
-  <tr><th style="background:#f4f6fa;text-align:left">Accepts Alternatives</th><td>${rfq.acceptsAlternatives}</td></tr>
-  ${reqRow}${obsRow}
-</table>
-<p style="margin-top:14px">Please provide: <b>unit price</b>, <b>lead time</b>, <b>available quantity</b>, <b>MOQ</b>, and any relevant date code or condition information.</p>
-<p>Best regards,<br><b>Procurement Team</b></p>
-</div>`;
-  }, []);
-
   // ─── Send RFQ to all suppliers in the list ─────────────────────────
   const sendToSuppliers = useCallback(async (rfq) => {
     if (!mailToken) {
@@ -790,7 +675,7 @@ export default function LiveRFQDashboard() {
       addLog(`✅ RFQ ${rfq.partNumber} distributed to ${sent}/${supplierList.length} supplier(s)`, "success");
     }
     setSendingSuppliers(false);
-  }, [mailToken, mailProvider, msClientId, msTenantId, supplierList, addLog, buildSupplierEmail, advanceStatus]);
+  }, [mailToken, mailProvider, msClientId, msTenantId, supplierList, addLog, advanceStatus]);
 
   // ─── Supplier list helpers ─────────────────────────────────────────
   const addSupplier = useCallback(() => {
@@ -861,7 +746,7 @@ export default function LiveRFQDashboard() {
 
       // Score against linked RFQ (if selected)
       const linkedRfq = rfqs.find(r => r.id === testSupplierLinkRfqId) || null;
-      const score = scoreSupplierResponse(parsed, linkedRfq);
+      const score = scoreSupplierResponse(parsed, linkedRfq, fxRates);
 
       const entry = {
         ...parsed,
@@ -892,7 +777,7 @@ export default function LiveRFQDashboard() {
     }
 
     setTestSupplierProcessing(false);
-  }, [testSupplierText, testSupplierLinkRfqId, rfqs, llmConfig, addLog]);
+  }, [testSupplierText, testSupplierLinkRfqId, rfqs, llmConfig, addLog, fxRates]);
 
   // ─── Filtered RFQs ────────────────────────────────────────────────
   const filteredRfqs = useMemo(() => {
@@ -984,7 +869,7 @@ export default function LiveRFQDashboard() {
             background: "linear-gradient(135deg, #38BDF8, #A78BFA)",
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 16, fontWeight: 700, color: "#fff",
-          }}>N</div>
+          }}>R</div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.02em" }}>
               RFQ <span style={{ color: "var(--accent)" }}>DASHBOARD</span>
@@ -1243,7 +1128,7 @@ export default function LiveRFQDashboard() {
                     }}
                   >
                     <option value="">All statuses</option>
-                    {Object.entries(STATUS).map(([key, { label, color }]) => (
+                    {Object.entries(STATUS).map(([key, { label }]) => (
                       <option key={key} value={key}>{label}</option>
                     ))}
                   </select>
@@ -1672,256 +1557,6 @@ export default function LiveRFQDashboard() {
               </div>
             </div>
 
-            {/* (detail panel is now rendered inline under each row) */}
-            {false && (() => {
-              const sr = null;
-              const responses = sr.supplierResponses || [];
-              const bestScore = responses.length ? Math.max(...responses.map(r => r.score ?? 0)) : null;
-              const scoreColor = (s) => s >= 70 ? "var(--green)" : s >= 40 ? "var(--amber)" : "var(--red)";
-              return (
-              <div style={{
-                background: "var(--surface)",
-                border: `1px solid ${sr.isObsolete ? "#FB923C40" : "var(--accent)30"}`,
-                borderRadius: 12, padding: 20, marginTop: 16,
-                animation: "slideIn 0.2s ease",
-              }}>
-                {/* ── Header row ── */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-                  <div>
-                    <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 2 }}>
-                      {sr.id} · {sr.sender}
-                      {sr.fromEmail && <span style={{ color: "var(--text3)" }}> · {sr.fromEmail}</span>}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ fontSize: 18, fontWeight: 700, direction: "ltr", color: "var(--accent)" }}>
-                        {sr.partNumber}
-                      </span>
-                      {sr.isObsolete && (
-                        <span style={{
-                          fontSize: 9, fontWeight: 800, padding: "2px 7px", borderRadius: 4,
-                          background: "#FB923C25", color: "#FB923C", border: "1px solid #FB923C50",
-                        }}>OBSOLETE</span>
-                      )}
-                      {sr.humanLoop && (
-                        <span style={{
-                          fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 4,
-                          background: "#38BDF820", color: "var(--accent)", border: "1px solid #38BDF840",
-                        }}>🔍 HUMAN REVIEW</span>
-                      )}
-                    </div>
-                  </div>
-                  <button onClick={() => setSelectedRfq(null)} style={{ background: "none", border: "none", cursor: "pointer" }}>
-                    <XIcon size={16} color="var(--text3)" />
-                  </button>
-                </div>
-
-                {/* ── 8 fields grid ── */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
-                  {[
-                    { l: "1. Customer",      v: sr.customerName,             c: "var(--text)" },
-                    { l: "2. Part Number",   v: sr.partNumber,               c: "var(--accent)", ltr: true },
-                    { l: "3. Quantity",      v: sr.quantity?.toLocaleString(),c: "var(--text)" },
-                    { l: "4. Delivery Date", v: sr.deliveryDate || "⚠ Not specified",
-                                             c: sr.deliveryDate ? "var(--text)" : "var(--red)" },
-                  ].map((f, i) => (
-                    <div key={i} style={{ background: "var(--surface2)", borderRadius: 8, padding: "10px 12px" }}>
-                      <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4, fontWeight: 600 }}>{f.l}</div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: f.c, direction: f.ltr ? "ltr" : "rtl", textAlign: f.ltr ? "left" : "right" }}>{f.v}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 12 }}>
-                  <div style={{ background: "var(--surface2)", borderRadius: 8, padding: "10px 12px" }}>
-                    <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4, fontWeight: 600 }}>5. Accepts Alternatives?</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: sr.acceptsAlternatives === "Yes" ? "var(--green)" : sr.acceptsAlternatives === "No" ? "var(--red)" : "var(--text3)" }}>
-                      {sr.acceptsAlternatives === "Yes" ? "✓ Yes" : sr.acceptsAlternatives === "No" ? "✗ No" : "— Not specified"}
-                    </div>
-                  </div>
-                  <div style={{ background: "var(--surface2)", borderRadius: 8, padding: "10px 12px" }}>
-                    <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4, fontWeight: 600 }}>6. Target Price</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: sr.targetPrice != null ? "var(--green)" : "var(--text3)", direction: "ltr", textAlign: "left" }}>
-                      {sr.targetPrice != null ? `$${sr.targetPrice}` : "—"}
-                    </div>
-                  </div>
-                  <div style={{ background: "var(--surface2)", borderRadius: 8, padding: "10px 12px" }}>
-                    <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4, fontWeight: 600 }}>Priority</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: sr.priority === "high" ? "var(--red)" : sr.priority === "medium" ? "var(--amber)" : "var(--green)" }}>
-                      {sr.priority === "high" ? "🔴 High" : sr.priority === "medium" ? "🟡 Medium" : "🟢 Low"}
-                    </div>
-                  </div>
-                </div>
-
-                {/* ── 7. Special Requirements ── */}
-                {sr.specialRequirements && (
-                  <div style={{
-                    background: "#FBBF2408", borderRadius: 8, padding: "12px 16px",
-                    fontSize: 12, color: "var(--amber)", borderRight: "3px solid var(--amber)", marginBottom: 12,
-                  }}>
-                    <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text3)", display: "block", marginBottom: 4 }}>7. Special Requirements</span>
-                    {sr.specialRequirements}
-                  </div>
-                )}
-
-                {sr.summary && (
-                  <div style={{ fontSize: 11, color: "var(--text3)", fontStyle: "italic", paddingBottom: 12 }}>
-                    AI Summary: {sr.summary}
-                  </div>
-                )}
-
-                {/* ── Supplier responses table ── */}
-                {responses.length > 0 && (
-                  <div style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text2)", marginBottom: 8 }}>
-                      📊 Supplier Responses ({responses.length}) · Best: <span style={{ color: scoreColor(bestScore) }}>{bestScore}/100</span>
-                    </div>
-                    <div style={{ overflowX: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10, direction: "ltr" }}>
-                        <thead>
-                          <tr style={{ background: "var(--surface2)", color: "var(--text3)", fontSize: 9, textTransform: "uppercase" }}>
-                            {["Supplier","Unit Price","Lead Time (d)","Available Qty","MOQ","Score","Notes"].map(h => (
-                              <th key={h} style={{ padding: "6px 10px", textAlign: "left", fontWeight: 600, whiteSpace: "nowrap" }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {responses.map((resp, ri) => {
-                            const isBest = resp.score === bestScore && bestScore != null;
-                            return (
-                              <tr key={ri} style={{
-                                background: isBest ? "#34D39910" : "transparent",
-                                borderBottom: "1px solid var(--border)",
-                                borderRight: isBest ? "3px solid var(--green)" : "none",
-                              }}>
-                                <td style={{ padding: "6px 10px", fontWeight: 600, color: "var(--text)" }}>
-                                  {isBest && <span style={{ color: "var(--green)", marginLeft: 4 }}>★</span>}
-                                  {resp.supplierName || "—"}
-                                </td>
-                                <td style={{ padding: "6px 10px", color: resp.quotedPrice != null ? "var(--green)" : "var(--text3)" }}>
-                                  {resp.quotedPrice != null ? `$${resp.quotedPrice}` : "—"}
-                                  {resp.currency && resp.currency !== "USD" && <span style={{ fontSize: 8, color: "var(--text3)", marginLeft: 3 }}>{resp.currency}</span>}
-                                </td>
-                                <td style={{ padding: "6px 10px", color: resp.leadTimeDays === 0 ? "var(--green)" : "var(--text2)" }}>
-                                  {resp.leadTimeDays === 0 ? "In Stock" : resp.leadTimeDays != null ? `${resp.leadTimeDays}d` : "—"}
-                                </td>
-                                <td style={{ padding: "6px 10px", color: "var(--text2)" }}>
-                                  {resp.availableQty != null ? resp.availableQty.toLocaleString() : resp.inStock ? "✓ Stock" : "—"}
-                                </td>
-                                <td style={{ padding: "6px 10px", color: "var(--text3)" }}>
-                                  {resp.moq != null ? resp.moq.toLocaleString() : "—"}
-                                </td>
-                                <td style={{ padding: "6px 10px" }}>
-                                  <span style={{
-                                    fontWeight: 700, color: scoreColor(resp.score ?? 0),
-                                    background: `${scoreColor(resp.score ?? 0)}15`,
-                                    padding: "2px 8px", borderRadius: 4,
-                                  }}>{resp.score ?? "—"}</span>
-                                </td>
-                                <td style={{ padding: "6px 10px", fontSize: 9, color: "var(--text3)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                  {resp.notes || "—"}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {/* ── Status history ── */}
-                {(sr.statusHistory || []).length > 0 && (
-                  <div style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text3)", marginBottom: 6, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                      Status History
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      {sr.statusHistory.map((h, hi) => (
-                        <div key={hi} style={{
-                          display: "flex", alignItems: "center", gap: 8,
-                          fontSize: 10, color: "var(--text2)",
-                          background: "var(--surface2)", borderRadius: 6, padding: "6px 10px",
-                        }}>
-                          <span style={{ fontSize: 9, color: "var(--text3)", minWidth: 55 }}>{h.ts}</span>
-                          <span style={{ color: STATUS[h.from]?.color }}>{STATUS[h.from]?.label || h.from}</span>
-                          <span style={{ color: "var(--text3)" }}>→</span>
-                          <span style={{ color: STATUS[h.to]?.color }}>{STATUS[h.to]?.label || h.to}</span>
-                          <span style={{ color: "var(--text3)" }}>·</span>
-                          <span style={{ fontStyle: "italic", color: "var(--text3)" }}>{h.comment}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* ── Action buttons ── */}
-                <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {sr.status !== 'completed' && (
-                    <button
-                      onClick={() => advanceStatus(sr.id)}
-                      style={{
-                        padding: "9px 20px", borderRadius: 8,
-                        background: "var(--accent)", color: "#000",
-                        border: "none", cursor: "pointer", fontSize: 11, fontWeight: 700,
-                      }}
-                    >Advance ▸</button>
-                  )}
-                  {sr.status !== 'new' && (
-                    <button
-                      onClick={() => { setBackModal({ rfqId: sr.id }); setBackComment(''); }}
-                      style={{
-                        padding: "9px 16px", borderRadius: 8,
-                        background: "var(--surface2)", color: "var(--text2)",
-                        border: "1px solid var(--border)", cursor: "pointer", fontSize: 11,
-                      }}
-                    >◂ Back</button>
-                  )}
-                  {/* Send to suppliers */}
-                  <button
-                    onClick={() => sendToSuppliers(sr)}
-                    disabled={sendingSuppliers || !mailToken || !supplierList.length}
-                    title={!mailToken ? "Connect your mailbox first" : !supplierList.length ? "Add suppliers in Settings" : sr.humanLoop ? "Remove the review flag before sending" : "Send to all suppliers in the list"}
-                    style={{
-                      padding: "9px 18px", borderRadius: 8, fontSize: 11, fontWeight: 700,
-                      display: "flex", alignItems: "center", gap: 6, cursor: "pointer",
-                      background: (sendingSuppliers || !mailToken || !supplierList.length)
-                        ? "var(--surface3)" : sr.humanLoop ? "#FBBF2420" : "#F472B620",
-                      color: (sendingSuppliers || !mailToken || !supplierList.length)
-                        ? "var(--text3)" : sr.humanLoop ? "var(--amber)" : "var(--pink)",
-                      border: `1px solid ${sr.humanLoop ? "#FBBF2440" : "#F472B640"}`,
-                    }}
-                  >
-                    <SendIcon size={12} />
-                    {sendingSuppliers ? "Sending..." : `Send to Suppliers (${supplierList.length})`}
-                  </button>
-                  {/* Human-loop toggle */}
-                  <button
-                    onClick={() => toggleHumanLoop(sr.id)}
-                    title={sr.humanLoop ? "Remove flag — allow automatic sending" : "Flag for manual review before sending"}
-                    style={{
-                      padding: "9px 14px", borderRadius: 8, fontSize: 11,
-                      cursor: "pointer",
-                      background: sr.humanLoop ? "#38BDF820" : "var(--surface2)",
-                      color: sr.humanLoop ? "var(--accent)" : "var(--text3)",
-                      border: `1px solid ${sr.humanLoop ? "#38BDF840" : "var(--border)"}`,
-                    }}
-                  >{sr.humanLoop ? "🔍 Remove Review" : "🔍 Flag for Review"}</button>
-                  {/* Copy */}
-                  <button
-                    onClick={() => {
-                      const text = `Customer: ${sr.customerName}\nPart Number: ${sr.partNumber}\nQuantity: ${sr.quantity}\nDelivery Date: ${sr.deliveryDate || "—"}\nAccepts Alternatives: ${sr.acceptsAlternatives}\nTarget Price: ${sr.targetPrice != null ? "$" + sr.targetPrice : "—"}\nSpecial Requirements: ${sr.specialRequirements || "—"}\nObsolete: ${sr.isObsolete ? "Yes" : "No"}`;
-                      navigator.clipboard?.writeText(text);
-                      addLog("📋 RFQ data copied to clipboard", "success");
-                    }}
-                    style={{
-                      padding: "9px 16px", borderRadius: 8,
-                      background: "var(--surface2)", color: "var(--text2)",
-                      border: "1px solid var(--border)", cursor: "pointer", fontSize: 11,
-                    }}
-                  >📋 Copy</button>
-                </div>
-              </div>
-              );
-            })()}
           </div>
         )}
 
@@ -2209,7 +1844,7 @@ export default function LiveRFQDashboard() {
                     }}
                   />
                   <div style={{ fontSize: 10, color: "var(--amber)", lineHeight: 1.5 }}>
-                    ⚠️ If the browser blocks CORS, start Ollama with: <code style={{fontFamily:"monospace"}}>OLLAMA_ORIGINS="*" ollama serve</code>
+                    ⚠️ If the browser blocks CORS, start Ollama with: <code style={{fontFamily:"monospace"}}>OLLAMA_ORIGINS=&quot;*&quot; ollama serve</code>
                   </div>
                 </div>
               )}
@@ -2360,7 +1995,7 @@ export default function LiveRFQDashboard() {
               <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 14, lineHeight: 1.7 }}>
                 The AI Agent tab talks to the backend server (SQL + dashboard-layout tools). The backend
                 requires an API token — this must match the <code>BACKEND_API_TOKEN</code> value set in the
-                backend's environment (see <code>env.example.txt</code>). Without a match, every request is
+                backend&apos;s environment (see <code>env.example.txt</code>). Without a match, every request is
                 rejected with 401.
               </div>
               <div style={{ fontSize: 10, color: "var(--text2)" }}>Backend API Token</div>
@@ -2545,6 +2180,46 @@ export default function LiveRFQDashboard() {
                     transition: "all 0.15s",
                   }}
                 >+ Add</button>
+              </div>
+            </div>
+
+            {/* ── FX rates for supplier scoring ───────────────────────── */}
+            <div style={{
+              background: "var(--surface)", border: "1px solid var(--border)",
+              borderRadius: 12, padding: 20, marginBottom: 16,
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Exchange Rates</div>
+              <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 14, lineHeight: 1.6 }}>
+                Target prices are extracted in USD. Supplier quotes in other currencies are converted
+                using these approximate rates before price scoring — update them periodically.
+              </div>
+              <div style={{ display: "flex", gap: 14 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4 }}>1 EUR = $ USD</div>
+                  <input
+                    type="number" step="0.01" min="0"
+                    value={fxRates.EUR}
+                    onChange={e => setFxRates(prev => ({ ...prev, EUR: parseFloat(e.target.value) || 0 }))}
+                    style={{
+                      width: "100%", padding: "9px 12px", borderRadius: 8,
+                      background: "var(--surface2)", border: "1px solid var(--border)",
+                      color: "var(--text)", fontSize: 12, outline: "none",
+                    }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4 }}>1 ILS = $ USD</div>
+                  <input
+                    type="number" step="0.01" min="0"
+                    value={fxRates.ILS}
+                    onChange={e => setFxRates(prev => ({ ...prev, ILS: parseFloat(e.target.value) || 0 }))}
+                    style={{
+                      width: "100%", padding: "9px 12px", borderRadius: 8,
+                      background: "var(--surface2)", border: "1px solid var(--border)",
+                      color: "var(--text)", fontSize: 12, outline: "none",
+                    }}
+                  />
+                </div>
               </div>
             </div>
 
@@ -3119,6 +2794,9 @@ Example Components Ltd`}
                           ["Part #",         testSupplierResult.partNumber],
                           ["Unit Price",     testSupplierResult.quotedPrice != null
                             ? `${testSupplierResult.quotedPrice} ${testSupplierResult.currency || "USD"}`
+                              + (testSupplierResult.currency && testSupplierResult.currency !== "USD"
+                                ? ` (~$${(testSupplierResult.quotedPrice * (fxRates[testSupplierResult.currency.toUpperCase()] ?? 1)).toFixed(2)} USD, used for scoring)`
+                                : "")
                             : null],
                           ["Lead Time",      testSupplierResult.leadTimeDays != null
                             ? (testSupplierResult.leadTimeDays === 0 ? "In Stock" : `${testSupplierResult.leadTimeDays} days`)

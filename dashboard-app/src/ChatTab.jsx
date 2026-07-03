@@ -191,7 +191,10 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate, onActio
   const getOrModel  = () => localStorage.getItem('rfq-openrouter-model') || 'nousresearch/hermes-3-llama-3-8b';
   // /api/health is intentionally unauthenticated (see server.js); every other
   // backend route requires this. Must match the backend's BACKEND_API_TOKEN.
-  const authHeaders = () => backendApiToken ? { Authorization: `Bearer ${backendApiToken}` } : {};
+  const authHeaders = useCallback(
+    () => backendApiToken ? { Authorization: `Bearer ${backendApiToken}` } : {},
+    [backendApiToken]
+  );
 
   // Check backend health on mount
   useEffect(() => {
@@ -209,7 +212,7 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate, onActio
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body:    JSON.stringify({ rfqs }),
     }).catch(() => {});
-  }, [rfqs, backendApiToken]);
+  }, [rfqs, authHeaders]);
 
   // Load user layout on mount
   useEffect(() => {
@@ -222,7 +225,7 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate, onActio
         }
       })
       .catch(() => {});
-  }, [userId, backendApiToken]);
+  }, [userId, authHeaders]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -348,7 +351,7 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate, onActio
         return updated;
       });
     }
-  }, [input, streaming, userId, applyLayout, currentConvId, backendApiToken]);
+  }, [input, streaming, userId, applyLayout, currentConvId, authHeaders]);
 
   const stop = useCallback(() => { abortRef.current?.abort(); }, []);
 
