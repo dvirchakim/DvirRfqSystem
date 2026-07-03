@@ -3,8 +3,15 @@ import { StatsWidget }      from './widgets/StatsWidget.jsx';
 import { RFQTable }         from './widgets/RFQTable.jsx';
 import { QuickActionsBar }  from './widgets/QuickActionsBar.jsx';
 import { CustomerInsights } from './widgets/CustomerInsights.jsx';
+import { MetricCard }       from './widgets/MetricCard.jsx';
+import { BarChart }         from './widgets/BarChart.jsx';
+import { MarkdownCard }     from './widgets/MarkdownCard.jsx';
+import { ActionButtons }    from './widgets/ActionButtons.jsx';
 
-const REGISTRY = { StatsWidget, RFQTable, QuickActionsBar, CustomerInsights };
+const REGISTRY = {
+  StatsWidget, RFQTable, QuickActionsBar, CustomerInsights,
+  MetricCard, BarChart, MarkdownCard, ActionButtons,
+};
 
 export const DEFAULT_LAYOUT = {
   theme: 'dark',
@@ -41,7 +48,10 @@ export function LayoutEngine({ layout = DEFAULT_LAYOUT, rfqs = [], onAction }) {
         );
         return (
           <div key={`${comp.type}-${i}`} style={{ animation: 'slideIn 0.25s ease' }}>
-            <Comp rfqs={rfqs} onAction={onAction} {...(comp.props || {})} />
+            {/* Agent props first, then trusted props — so agent-supplied props can
+                never override rfqs/onAction. The backend already whitelists props;
+                this ordering is defense-in-depth for stale localStorage layouts. */}
+            <Comp {...(comp.props || {})} rfqs={rfqs} onAction={onAction} />
           </div>
         );
       })}

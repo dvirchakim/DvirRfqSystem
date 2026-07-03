@@ -26,12 +26,17 @@ Only SELECT queries on the 'rfqs' table are permitted.
 Do NOT query system tables, pg_ tables, or information_schema.
 `;
 
-// Defense-in-depth string checks. These are NOT the security boundary — a clever
-// rewrite (comments, unicode lookalikes, casing tricks) can slip past a regex.
-// The actual boundary is the Postgres READ ONLY transaction below, combined with
-// the rfq_agent role only having SELECT grants (see schema.sql). Even if a write
-// statement got past every check here, Postgres itself would reject it.
-const FORBIDDEN = /\b(DROP|DELETE|UPDATE|INSERT|MERGE|CREATE|ALTER|TRUNCATE|GRANT|REVOKE|EXEC(?:UTE)?|CALL|COPY|LOCK|VACUUM|REINDEX|LISTEN|NOTIFY|pg_|information_schema|current_user|session_user|pg_sleep)\b/i;
+// Defense-in-depth string checks. For writes these are NOT the sole boundary —
+// the Postgres READ ONLY transaction below plus rfq_agent's SELECT-only grants
+// would reject any write even if it slipped past here. But system-catalog reads
+// (pg_*, information_schema) ARE reads, so the transaction won't stop them and
+// rfq_agent can read pg_catalog by default — for those, this blocklist is the
+// boundary, so it must actually match them.
+const FORBIDDEN_KEYWORDS = /\b(DROP|DELETE|UPDATE|INSERT|MERGE|CREATE|ALTER|TRUNCATE|GRANT|REVOKE|EXEC(?:UTE)?|CALL|COPY|LOCK|VACUUM|REINDEX|LISTEN|NOTIFY|current_user|session_user)\b/i;
+// Identifier prefixes for system catalogs. NOTE: a trailing \b after "pg_" never
+// matches (underscore is a word char, so there's no boundary before the table
+// name in "pg_roles"). Match the whole identifier instead.
+const FORBIDDEN_IDENTIFIERS = /\b(pg_[a-z0-9_]+|information_schema)\b/i;
 
 const STATEMENT_TIMEOUT_MS = 5000;
 
@@ -54,7 +59,7 @@ export async function executeReadonlySQL(sql) {
   if (trimmed.includes(';')) {
     throw new Error('Multiple statements are not permitted.');
   }
-  if (FORBIDDEN.test(trimmed)) {
+  if (FORBIDDEN_KEYWORDS.test(trimmed) || FORBIDDEN_IDENTIFIERS.test(trimmed)) {
     throw new Error('Forbidden SQL keyword detected. Only simple SELECT queries on the rfqs table are allowed.');
   }
 

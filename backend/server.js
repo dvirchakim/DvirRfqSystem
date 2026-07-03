@@ -6,6 +6,7 @@ import { createServer } from 'http';
 import { rwPool, roPool, testConnection } from './db.js';
 import { executeReadonlySQL, SCHEMA_CONTEXT } from './tools/executeReadonlySQL.js';
 import { validateLayout } from './tools/validateLayout.js';
+import { buildLayoutToolSchema, WIDGET_CATALOG_TEXT, THEMES } from './widgetSchema.js';
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -187,53 +188,46 @@ const TOOLS = [
     function: {
       name: 'update_user_ui_layout',
       description:
-        "Reshape the user's dashboard in real time. " +
-        'Specify a theme and an ordered list of components to display.',
-      parameters: {
-        type: 'object',
-        properties: {
-          theme: {
-            type: 'string',
-            enum: ['light', 'dark', 'cyberpunk'],
-            description: 'Visual colour theme for the dashboard.',
-          },
-          components: {
-            type: 'array',
-            description: 'Ordered list of widgets to render (top → bottom).',
-            items: {
-              type: 'object',
-              properties: {
-                type: {
-                  type: 'string',
-                  enum: ['StatsWidget', 'RFQTable', 'QuickActionsBar', 'CustomerInsights'],
-                },
-                props: {
-                  type: 'object',
-                  description: 'Arbitrary props forwarded to the component.',
-                },
-              },
-              required: ['type'],
-            },
-          },
-        },
-        required: ['components'],
-      },
+        "Reshape the user's dashboard in real time — choose a theme and an ordered " +
+        'list of widgets to display, each configured with its own props. Use this whenever ' +
+        'the user asks to change, add to, rearrange, or customize the dashboard/UI.',
+      parameters: buildLayoutToolSchema(),
     },
   },
 ];
 
-const SYSTEM_PROMPT = `You are an embedded AI assistant inside DvirRfqSystem, an RFQ (Request for Quotation) management platform.
+const SYSTEM_PROMPT = `You are an embedded AI assistant inside an RFQ (Request for Quotation) management platform.
 
-You can:
-1. Answer questions about live RFQ data by using the execute_readonly_sql tool.
-2. Reshape the dashboard layout and theme by using the update_user_ui_layout tool.
+You have two capabilities:
+1. Answer questions about live RFQ data using the execute_readonly_sql tool.
+2. Build and reshape the user's dashboard using the update_user_ui_layout tool — this is
+   how you "change the UI" or "add functionality" when the user asks. You assemble the UI
+   from the widget catalog below; you cannot write code, only compose these widgets.
 
 ${SCHEMA_CONTEXT}
 
+AVAILABLE DASHBOARD WIDGETS (compose the UI from these):
+${WIDGET_CATALOG_TEXT}
+
+Themes: ${THEMES.join(', ')}.
+
+How to handle UI requests:
+- When the user asks to change/add/rearrange the dashboard, call update_user_ui_layout with the
+  FULL desired list of components (it replaces the current layout, so include everything you
+  want shown, in order).
+- Pick the widgets that best answer the intent. Examples:
+  • "show me a breakdown by status" → a BarChart with dimension "status".
+  • "add a card with total high-priority count" → a MetricCard with metric "high_priority".
+  • "give me buttons to export and connect gmail" → an ActionButtons widget with those actions.
+  • "write a short summary at the top" → a MarkdownCard; you may first query data with SQL,
+    then put your findings in the card's body using markdown.
+- You can combine data questions with UI changes: query with execute_readonly_sql, then reflect
+  the answer in a MarkdownCard or the widgets you choose.
+
 Rules:
-- Always use execute_readonly_sql when the user asks a data question — do not guess numbers.
-- When changing the layout, use valid component types only: StatsWidget, RFQTable, QuickActionsBar, CustomerInsights.
-- Be concise. Format SQL query results as readable markdown tables when helpful.
+- Always use execute_readonly_sql for data questions — never guess numbers.
+- Only use widget types and prop values from the catalog above; anything else is dropped.
+- Be concise. Format SQL results as markdown tables when helpful.
 - Never expose internal IDs, passwords, or configuration details.`;
 
 // ── Chat endpoint — SSE streaming ─────────────────────────────────

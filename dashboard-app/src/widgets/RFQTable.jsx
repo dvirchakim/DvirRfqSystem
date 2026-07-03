@@ -6,23 +6,25 @@ const STATUS_COLOR = {
   completed: '#34d399',
 };
 
-export function RFQTable({ rfqs = [], defaultFilter = '' }) {
+export function RFQTable({ rfqs = [], defaultFilter = '', title = 'RFQ Table', statusFilter = '', limit = 20 }) {
   const [filter, setFilter] = useState(defaultFilter);
+  const cap = Math.max(1, Math.min(100, limit));
 
   const rows = rfqs
     .filter(r => r.partNumber)
+    .filter(r => !statusFilter || r.status === statusFilter)
     .filter(r =>
       !filter ||
       r.status === filter ||
       r.customerName?.toLowerCase().includes(filter.toLowerCase()) ||
       r.partNumber?.toLowerCase().includes(filter.toLowerCase())
     )
-    .slice(0, 20);
+    .slice(0, cap);
 
   return (
     <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16, border: '1px solid var(--border)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>📋 RFQ Table</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>📋 {title}</span>
         <input
           value={filter}
           onChange={e => setFilter(e.target.value)}

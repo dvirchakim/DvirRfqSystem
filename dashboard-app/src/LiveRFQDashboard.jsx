@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { ChatTab } from "./ChatTab.jsx";
+import { LayoutEngine } from "./layoutEngine.jsx";
 import { parseEml } from "./emlParser.js";
 import { callLLM, PROVIDERS, OPENROUTER_MODELS, SUPPLIER_PARSE_PROMPT, scoreSupplierResponse } from "./llmClient.js";
 import { exportToExcel, exportToPDF } from "./exportUtils.js";
@@ -541,6 +542,25 @@ export default function LiveRFQDashboard() {
     addLog(`🔌 Disconnected from ${mailProvider}`, "info");
   }, [mailProvider, msClientId, addLog]);
 
+  // ─── Dispatch actions from agent-built ActionButtons / QuickActionsBar ─────
+  // Maps a fixed allow-list of action strings (see widgets/ActionButtons.jsx) to
+  // real app behaviors. The agent can only trigger capabilities exposed here.
+  const agentAction = useCallback((action) => {
+    switch (action) {
+      case 'connect_gmail':   setMailProvider('gmail');  setActiveTab('inbox'); break;
+      case 'connect_outlook': setMailProvider('outlook'); setActiveTab('inbox'); break;
+      case 'manual_mode':     setManualMode(true); addLog('⚡ Manual mode enabled by agent action', 'info'); break;
+      case 'send_suppliers':  setActiveTab('dashboard'); addLog('📤 Open an RFQ and use "Send to suppliers" to distribute', 'info'); break;
+      case 'export_excel':    exportToExcel(rfqs); break;
+      case 'export_pdf':      exportToPDF(rfqs); break;
+      case 'go_dashboard':    setActiveTab('dashboard'); break;
+      case 'go_inbox':        setActiveTab('inbox'); break;
+      case 'go_settings':     setActiveTab('config'); break;
+      case 'refresh':         addLog('🔄 Refreshed', 'info'); break;
+      default:                addLog(`Unknown action: ${action}`, 'warning');
+    }
+  }, [rfqs, addLog]);
+
   // ─── Load example .eml into the test textarea ─────────────────────
   const loadExample = useCallback(async (filename) => {
     if (!filename) return;
@@ -1070,6 +1090,27 @@ export default function LiveRFQDashboard() {
         {/* ━━━ DASHBOARD TAB ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
         {activeTab === "dashboard" && (
           <div style={{ animation: "slideIn 0.3s ease" }}>
+
+            {/* Agent-built layout — appears here whenever the AI Agent has reshaped
+                the dashboard. This is the user's actual screen reflecting the agent's changes. */}
+            {agentLayout?.components?.length > 0 && (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--pink)" }}>
+                    🤖 Agent-built view
+                  </div>
+                  <button
+                    onClick={() => setAgentLayout(null)}
+                    style={{
+                      padding: "4px 10px", borderRadius: 6, fontSize: 10, cursor: "pointer",
+                      background: "var(--surface2)", color: "var(--text3)", border: "1px solid var(--border)",
+                    }}
+                    title="Clear the agent's custom layout and show the default dashboard"
+                  >✕ Reset to default</button>
+                </div>
+                <LayoutEngine layout={agentLayout} rfqs={rfqs} onAction={agentAction} />
+              </div>
+            )}
 
             {/* KPI strip */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 24 }}>
@@ -3131,6 +3172,7 @@ Example Components Ltd`}
             rfqs={rfqs}
             userId={googleClientId || msClientId || "default"}
             onLayoutUpdate={layout => setAgentLayout(layout)}
+            onAction={agentAction}
             backendApiToken={backendApiToken}
           />
         )}

@@ -1,16 +1,14 @@
-const PERMITTED_COMPONENTS = new Set([
-  'StatsWidget',
-  'RFQTable',
-  'QuickActionsBar',
-  'CustomerInsights',
-]);
+import { WIDGET_TYPES, THEMES, coerceProps } from '../widgetSchema.js';
 
-const PERMITTED_THEMES = new Set(['light', 'dark', 'cyberpunk']);
+const PERMITTED_COMPONENTS = new Set(WIDGET_TYPES);
+const PERMITTED_THEMES     = new Set(THEMES);
 
 /**
  * Validates and normalises a layout payload emitted by the agent.
  * Throws a descriptive Error on any violation.
- * Returns a clean, safe layout object on success.
+ * Returns a clean, safe layout object on success — every component's props are
+ * whitelisted and coerced to the widget's declared schema, so the frontend only
+ * ever receives bounded, expected values (no arbitrary prop injection).
  */
 export function validateLayout(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -26,6 +24,9 @@ export function validateLayout(payload) {
 
   if (!Array.isArray(payload.components)) {
     throw new Error('components must be an array.');
+  }
+  if (payload.components.length > 24) {
+    throw new Error('Too many components (max 24).');
   }
 
   const components = payload.components.map((comp, idx) => {
@@ -44,7 +45,8 @@ export function validateLayout(payload) {
       throw new Error(`Component "${comp.type}" at index ${idx}: props must be a plain object.`);
     }
 
-    return { type: comp.type, props: comp.props ?? {} };
+    // Whitelist + coerce props against the widget's declared schema.
+    return { type: comp.type, props: coerceProps(comp.type, comp.props ?? {}) };
   });
 
   return { theme, components };

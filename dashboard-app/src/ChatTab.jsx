@@ -172,7 +172,7 @@ function MessageBubble({ msg }) {
 }
 
 // ── Main ChatTab component ────────────────────────────────────────
-export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate, backendApiToken = '' }) {
+export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate, onAction, backendApiToken = '' }) {
   const [messages,       setMessages]       = useState([]);
   const [input,          setInput]          = useState('');
   const [streaming,      setStreaming]      = useState(false);
@@ -602,7 +602,7 @@ export function ChatTab({ rfqs = [], userId = 'default', onLayoutUpdate, backend
             Live Layout Preview
           </div>
           {layout ? (
-            <LayoutEngine layout={layout} rfqs={rfqs} />
+            <LayoutEngine layout={layout} rfqs={rfqs} onAction={onAction} />
           ) : (
             <div style={{ fontSize: 11, color: 'var(--text3)', padding: '20px 0', textAlign: 'center' }}>
               Ask the agent to reshape the dashboard to see a live preview here.
